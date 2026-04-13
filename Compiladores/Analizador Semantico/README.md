@@ -1,5 +1,13 @@
 # Analizador Semántico de B-Minor en Python
 
+## Estudiantes
+
+- **Jonathan David Ochoa Echeverri**
+- **Juan Camilo Gil Ramírez**
+- **Juan José Ruiz Mellizo**
+
+---
+
 ## Introducción
 
 Este proyecto implementa un **analizador semántico** para el lenguaje de programación **B-Minor** en Python. El analizador verifica la coherencia semántica de programas B-Minor escritos sin errores sintácticos, detectando problemas como:
@@ -215,7 +223,327 @@ class SemanticChecker:
 
 ---
 
-## 3. Tipos Soportados
+## DESCRIPCIÓN DETALLADA DE CADA ARCHIVO .py
+
+---
+
+### 1. **lexer.py** - Análisis Léxico
+
+**Responsabilidad**: Convertir el código fuente en una secuencia de tokens
+
+**Clases principales**:
+- `Lexer`: Realiza la tokenización
+
+**Métodos clave**:
+
+| Método | Descripción |
+|--------|-------------|
+| `__init__()` | Define patrones regex para tokens (NUMBER, ID, TYPE, operators, etc.) |
+| `tokenize(source)` | Convierte código fuente en lista de diccionarios `{'type', 'value', 'line'}` |
+| `_remove_comments(source)` | Elimina comentarios `/* */` y `//` preservando saltos de línea |
+
+**Tokens reconocidos**:
+- **Literales**: `NUMBER`, `FLOAT_LITERAL`, `STRING`, `CHAR`, `TRUE`, `FALSE`
+- **Palabras clave**: `IF`, `ELSE`, `WHILE`, `FOR`, `RETURN`, `FUNC`, `VOID`, `ARRAY`
+- **Tipos**: `TYPE` (integer, boolean, string, float, char)
+- **Operadores**: `PLUS`, `MINUS`, `MULT`, `DIV`, `MOD`, `EQL`, `NEQ`, `LT`, `GT`, `LEQ`, `GEQ`, `AND`, `OR`, `NOT`
+- **Delimitadores**: `LPAREN`, `RPAREN`, `LBRACE`, `RBRACE`, `LBRACKET`, `RBRACKET`
+- **Puntuación**: `COLON`, `SEMI`, `COMMA`, `ASSIGN`
+
+**Ejemplo**:
+```python
+lexer = Lexer()
+tokens = lexer.tokenize("x: integer = 5;")
+# Devuelve: [
+#   {'type': 'ID', 'value': 'x', 'line': 1},
+#   {'type': 'COLON', 'value': ':', 'line': 1},
+#   {'type': 'TYPE', 'value': 'integer', 'line': 1},
+#   {'type': 'ASSIGN', 'value': '=', 'line': 1},
+#   {'type': 'NUMBER', 'value': '5', 'line': 1},
+#   {'type': 'SEMI', 'value': ';', 'line': 1}
+# ]
+```
+
+**Limitaciones**:
+- No soporta comentarios anidados
+- Strings con escapes limitados
+- Sin soporte para notación científica en flotantes
+
+---
+
+### 2. **parser.py** - Análisis Sintáctico
+
+**Responsabilidad**: Construir el Abstract Syntax Tree (AST) a partir de los tokens
+
+**Clases principales**:
+- `Parser`: Implementa análisis recursivo descendente
+
+**Métodos clave**:
+
+| Método | Descripción | Retorna |
+|--------|-------------|---------|
+| `parse()` | Punto de entrada, analiza el programa completo | `Program` |
+| `parse_type()` | Analiza tipos (simples y arrays) | String (ej: `"integer"`, `"array[integer]"`) |
+| `parse_expression()` | Analiza expresiones con operadores binarios | Nodo de expresión |
+| `parse_primary()` | Analiza elementos primarios (literales, identificadores, paréntesis) | Nodo primario |
+| `parse_statement()` | Analiza sentencias de nivel superior | `VarDeclaration`, `Assignment`, `IfStmt`, etc. |
+| `parse_block()` | Analiza bloques `{ ... }` | Lista de sentencias |
+| `parse_function()` | Analiza definiciones de función | `Function` |
+| `parse_parameter()` | Analiza parámetro formal de función | `VarDeclaration` |
+| `consume(type)` | Consume un token esperado, avanza posición | Diccionario del token |
+| `peek()` | Observa el token actual sin consumirlo | Diccionario del token |
+
+**Jerarquía de Precedencia**:
+1. Literals, Identifiers, Parentheses (parse_primary)
+2. Unary operators (-, !)
+3. Multiplicative (*, /, %)
+4. Additive (+, -)
+5. Relational (<, <=, >, >=)
+6. Equality (==, !=)
+7. Logical AND (&&)
+8. Logical OR (||)
+9. Assignment (=)
+
+**Ejemplo**:
+```python
+parser = Parser(tokens)
+ast = parser.parse()
+# Retorna: Program(declarations=[...])
+```
+
+**Limitaciones**:
+- No soporta array initializers `{val1, val2}`
+- Sin acceso a elementos `arr[index]`
+- Sin soporte completo para bucles for
+- Sobrecarga de operadores limitada
+
+---
+
+### 3. **model.py** - Definición del AST
+
+**Responsabilidad**: Definir la estructura de todos los nodos del árbol sintáctico
+
+**Clases**:
+
+#### Expresiones
+- `IntLiteral(value, lineno)`: Número entero
+- `FloatLiteral(value, lineno)`: Número flotante  
+- `StringLiteral(value, lineno)`: String
+- `BooleanLiteral(value, lineno)`: Booleano
+- `Identifier(name, lineno)`: Referencia a variable/función
+- `UnaryOp(op, operand, lineno, type)`: Operación unaria
+- `BinaryOp(op, left, right, lineno, type)`: Operación binaria
+- `FunctionCall(name, args, lineno, type)`: Llamada a función
+
+#### Sentencias
+- `VarDeclaration(name, type_name, lineno, value)`: Declaración variable
+- `Assignment(name, value, lineno)`: Asignación
+- `IfStmt(condition, then_block, lineno, else_block)`: Sentencia if-else
+- `WhileStmt(condition, body, lineno)`: Bucle while
+- `ReturnStmt(lineno, expr)`: Sentencia return
+
+#### Estructuras Superiores
+- `Function(name, return_type, params, body, lineno)`: Definición función
+- `Program(declarations, lineno)`: Raíz del árbol
+
+**Campos comunes**:
+- `lineno`: Número de línea para reportes de error
+- `type`: Tipo resultante (anotado durante análisis semántico)
+
+**Ejemplo**:
+```python
+from model import *
+
+# Crear un nodo de variable
+var = VarDeclaration(name="x", type_name="integer", value=IntLiteral(5), lineno=1)
+
+# Crear una operación binaria
+expr = BinaryOp(op="+", left=Identifier("x"), right=IntLiteral(3), lineno=2)
+```
+
+---
+
+### 4. **symtab.py** - Tabla de Símbolos
+
+**Responsabilidad**: Gestionar la tabla de símbolos con soporte para alcances léxicos
+
+**Clases principales**:
+- `Symtab`: Tabla de símbolos con jerarquía padre-hijo
+
+**Métodos clave**:
+
+| Método | Descripción | Parámetros |
+|--------|-------------|-----------|
+| `__init__(name, parent)` | Crea alcance con nombre y referencia al padre | `name`: str, `parent`: Symtab o None |
+| `add(symbol, node)` | Agrega símbolo al alcance actual | `symbol`: str, `node`: AST node |
+| `get(symbol)` | Busca símbolo respetando cadena padre | `symbol`: str |
+| `in_local(symbol)` | Verifica si símbolo está en alcance local | `symbol`: str |
+
+**Excepciones**:
+- `SymbolDefinedError`: Redeclaración en el mismo alcance
+- `SymbolConflictError`: Conflicto de tipos en redeclaración
+
+**Ejemplo**:
+```python
+from symtab import Symtab
+
+# Crear tabla global
+global_tab = Symtab("global")
+
+# Agregar símbolo
+try:
+    global_tab.add("x", var_node)
+except SymbolDefinedError:
+    print("x ya está declarado")
+
+# Crear alcance de función
+func_tab = Symtab("func_main", parent=global_tab)
+func_tab.add("param1", param_node)
+
+# Buscar símbolo
+sym = func_tab.get("x")  # Encuentra en parent si no está en func_tab
+```
+
+---
+
+### 5. **checker.py** - Analizador Semántico
+
+**Responsabilidad**: Verificar reglas semánticas y validar coherencia del programa
+
+**Clases principales**:
+- `SemanticChecker`: Implementa patrón Visitor para recorrer AST
+
+**Sistema de tipos (contiene)**:
+- `TYPES`: Diccionario de tipos soportados
+- `BINOP_TABLE`: Compatibilidad de operadores binarios
+- `UNARYOP_TABLE`: Compatibilidad de operadores unarios
+- Funciones: `check_binop()`, `check_unaryop()`, `loockup_type()`, `are_compatible()`
+
+**Métodos visitantes** (sobrecargados con `@multimethod`):
+
+| Método | Nodo | Verifica |
+|--------|------|----------|
+| `visit(Program)` | Raíz | Procesa todas las declaraciones |
+| `visit(Function)` | Función | Registra función, crea alcance, verifica parámetros y cuerpo |
+| `visit(VarDeclaration)` | Variable | Tipo válido, compatibilidad inicializador, registra símbolo |
+| `visit(Assignment)` | Asignación | Variable declarada, compatibilidad de tipos |
+| `visit(IfStmt)` | If | Condición booleana, crea alcances |
+| `visit(WhileStmt)` | While | Condición booleana, crea alcance |
+| `visit(BinaryOp)` | Bin.Op. | Compatibilidad operandos, anota tipo |
+| `visit(UnaryOp)` | Un.Op. | Compatibilidad operando, anota tipo |
+| `visit(FunctionCall)` | Llamada | Función existe, argumentos coinciden |
+| `visit(ReturnStmt)` | Return | Tipo retornado coincida con función |
+| `visit(Identifier)` | ID | Verificar declaración, devolver tipo |
+| `visit(IntLiteral/Float/...)` | Literal | Devolver tipo primitivo |
+
+**Atributos**:
+- `symtab`: Tabla de símbolos actual (cambia al entrar/salir de alcances)
+- `errors`: Lista de errores acumulados
+- `current_return_type`: Tipo de retorno esperado de función actual
+
+**Métodos auxiliares**:
+- `report(message, line)`: Registra error semántico
+
+**Ejemplo**:
+```python
+from checker import SemanticChecker
+
+checker = SemanticChecker()
+checker.visit(ast)  # Recorre AST
+
+if checker.errors:
+    for error in checker.errors:
+        print(error)
+else:
+    print("Sin errores semánticos")
+```
+
+---
+
+### 6. **main.py** - Interfaz de Ejecución
+
+**Responsabilidad**: Orquestar el análisis completo y proporcionar interfaz de usuario
+
+**Funciones principales**:
+
+| Función | Descripción | Retorna |
+|---------|-------------|---------|
+| `run_test(filename)` | Ejecuta análisis completo en un archivo | bool (True si válido) |
+
+**Flujo**:
+1. Lee archivo fuente
+2. Ejecuta Lexer (tokenización)
+3. Ejecuta Parser (construcción AST)
+4. Ejecuta SemanticChecker (validación semántica)
+5. Imprime resultados
+
+**Interfaz de línea de comandos**:
+```bash
+python main.py archivo.bminor
+```
+
+**Salida**:
+- `semantic check: success` si sin errores (exit code 0)
+- `semantic check: failed` si con errores (exit code 1)
+
+---
+
+### 7. **run_tests.py** - Script de Pruebas
+
+**Responsabilidad**: Ejecutar batería de pruebas en lote
+
+**Función principal**:
+- `run_tests(directory)`: Ejecuta todos los archivos `.bminor` en un directorio
+
+**Lógica**:
+- Archivos en `tests/good/` deben pasar (exit code 0)
+- Archivos en `tests/bad/` deben fallar (exit code != 0)
+- Compara con expectativa y reporta resultado
+
+**Ejemplo**:
+```bash
+python run_tests.py
+# Prueba tests/good/* y tests/bad/*
+# Reporta: Correctas: X/20, Incorrectas: Y/20
+```
+
+---
+
+## Flujo Completo de Análisis
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                FLUJO DE ANÁLISIS COMPLETO                       │
+└─────────────────────────────────────────────────────────────────┘
+
+ENTRADA: archivo.bminor
+    ↓
+1. main.py lee el archivo
+    ↓
+2. lexer.py tokeniza
+   "x: integer = 5;" 
+   → [{'type':'ID', 'value':'x'}, {'type':'COLON'}, ...]
+    ↓
+3. parser.py construye AST
+   → Program(declarations=[VarDeclaration(...)])
+    ↓
+4. checker.py verifica semántica
+   ├─ Crea tabla de símbolos global
+   ├─ Recorre AST con patrón Visitor
+   ├─ Verifica tipos y reglas
+   ├─ Acumula errores
+   └─ Anota tipos en nodos
+    ↓
+5. main.py reporta resultado
+   - Sin errores: "semantic check: success" (exit 0)
+   - Con errores: Lista de errores + "semantic check: failed" (exit 1)
+    ↓
+SALIDA: Código de salida + mensajes de error (si aplica)
+```
+
+---
+
+
 
 El sistema soporta los siguientes tipos de datos primitivos:
 

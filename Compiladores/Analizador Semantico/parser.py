@@ -69,19 +69,26 @@ class Parser:
         Returns:
             Nodo del AST representando la expresión
         """
-        # Versión simplificada: comienza con el operando primario izquierdo
+        # Comienza con el operando primario izquierdo
         left = self.parse_primary()
         
         # Procesar operadores binarios
-        while self.peek() and self.peek()['type'] == 'OP':
-            op_tok = self.consume('OP')
-            right = self.parse_primary()
-            left = BinaryOp(op=op_tok['value'], left=left, right=right, lineno=op_tok['line'])
+        while self.peek():
+            tok_type = self.peek()['type']
+            # Soportar todos los tipos de operadores binarios
+            if tok_type in ('PLUS', 'MINUS', 'MULT', 'DIV', 'MOD', 'LT', 'GT', 'LEQ', 'GEQ', 'EQL', 'NEQ', 'AND', 'OR'):
+                op_tok = self.consume()
+                right = self.parse_primary()
+                left = BinaryOp(op=op_tok['value'], left=left, right=right, lineno=op_tok['line'])
+            else:
+                break
         
         return left
 
     def parse_primary(self):
         """Analiza una expresión primaria (literal, identificador o llamada a función).
+        
+        Incluye operadores unarios (-x, !x) y literales booleanos.
         
         Returns:
             Nodo del AST representando la expresión primaria
@@ -89,11 +96,49 @@ class Parser:
         Raises:
             Exception: Si la expresión no es válida
         """
+        tok = self.peek()
+        
+        # Operadores unarios
+        if tok['type'] in ('MINUS', 'NOT', 'PLUS'):
+            op_tok = self.consume()
+            operand = self.parse_primary()
+            return UnaryOp(op=op_tok['value'], operand=operand, lineno=op_tok['line'])
+        
+        # Paréntesis para agrupar expresiones
+        if tok['type'] == 'LPAREN':
+            self.consume('LPAREN')
+            expr = self.parse_expression()
+            self.consume('RPAREN')
+            return expr
+        
         tok = self.consume()
         
         # Número entero literal
         if tok['type'] == 'NUMBER':
             return IntLiteral(value=int(tok['value']), lineno=tok['line'])
+        
+        # Número flotante literal
+        if tok['type'] == 'FLOAT_LITERAL':
+            return FloatLiteral(value=float(tok['value']), lineno=tok['line'])
+        
+        # Booleanos
+        if tok['type'] in ('TRUE', 'FALSE'):
+            value = tok['type'] == 'TRUE'
+            return BooleanLiteral(value=value, lineno=tok['line'])
+        
+        # String literal
+        if tok['type'] == 'STRING':
+            # Remover comillas
+            value = tok['value'][1:-1]
+            # Procesar escapes básicos
+            value = value.replace('\\n', '\n').replace('\\t', '\t').replace('\\\\', '\\')
+            return StringLiteral(value=value, lineno=tok['line'])
+        
+        # Char literal
+        if tok['type'] == 'CHAR':
+            # Remover comillas
+            value = tok['value'][1:-1]
+            return StringLiteral(value=value, lineno=tok['line'])
         
         # Identificador (posiblemente seguido de parámetros si es llamada a función)
         if tok['type'] == 'ID':
@@ -114,7 +159,7 @@ class Parser:
             # Es solo un identificador (referencia a variable)
             return Identifier(name=tok['value'], lineno=tok['line'])
         
-        raise Exception(f"Expresión inválida en línea {tok['line']}")
+        raise Exception(f"Expresión inválida en línea {tok['line']}: {tok['type']}")
 
     # =============== ANÁLISIS DE SENTENCIAS ===============
 
@@ -214,4 +259,123 @@ class Parser:
         return Function(name=name_tok['value'], return_type=ret_type, params=params, body=body, lineno=name_tok['line'])
 
     def parse_parameter(self):
+        """Analiza un parámetro formal de función.
+        
+        Returns:
+            VarDeclaration representando el parámetro
+        """
+        name = self.consume('ID')
+        self.consume('COLON')
+        t_type = self.consume('TYPE')
+        return VarDeclaration(name=name['value'], type_name=t_type['value'], lineno=name['line'])
+
+    # =============== ANÁLISIS PRINCIPAL DEL PROGRAMA ===============
+
+    def parse_type(self):
+        """Analiza un tipo de dato que puede incluir arrays.
+        
+        Soporta:
+        - Tipos simples: integer, boolean, string, etc.
+        - Tipos array: array [tamaño] tipo_base
+        
+        Returns:
+            String con el nombre del tipo
+        """
+        tok = self.peek()
+        
+        if tok['type'] == 'ARRAY':
+            # array [Size] BaseType
+            self.consume('ARRAY')
+            self.consume('LBRACKET')
+            # Parsear el tamaño (puede ser númer o identificador)
+            if self.peek()['type'] == 'NUMBER':
+                self.consume('NUMBER')
+            elif self.peek()['type'] == 'ID':
+                self.consume('ID')
+            else:
+                raise Exception(f"Tamaño de array esperado en línea {self.peek()['line']}")
+            self.consume('RBRACKET')
+            
+            # Parsear el tipo base recursivamente (para arrays multidimensionales)
+            base_type = self.parse_type()
+            return f"array[{base_type}]"
+        
+        elif tok['type'] == 'TYPE':
+            type_tok = self.consume('TYPE')
+            return type_tok['value']
+        
+        elif tok['type'] == 'VOID':
+            void_tok = self.consume('VOID')
+            return void_tok['value']
+        
+        else:
+            raise Exception(f"Tipo esperado en línea {tok['line']}, pero se obtuvo {tok['type']}")
+
+    def parse(self):
+        """Analiza el programa completo.
+        
+        Un programa en B-Minor es una secuencia de declaraciones de funciones
+        y/o variables globales.
+        
+        Returns:
+            Nodo Program conteniendo el AST completo
+        """
+        declarations = []
+        
+        # Procesar todas las declaraciones de nivel superior
+        while self.peek():
+            tok = self.peek()
+            
+            # Puede ser ID seguido de : (variable o función)
+            if tok['type'] == 'ID' or tok['type'] == 'FUNC':
+                # Mirar adelante para determinar qué es
+                if tok['type'] == 'FUNC':
+                    # Es una palabra clave func
+                    declarations.append(self.parse_function())
+                else:
+                    # Es ID, necesito ver si es variable o función
+                    name_tok = self.consume('ID')
+                    
+                    if self.peek()['type'] == 'COLON':
+                        self.consume('COLON')
+                        
+                        # Verificar si es función o variable
+                        if self.peek()['type'] == 'FUNC':
+                            # Es una función: name: function returnType (params) = { body }
+                            self.consume('FUNC')
+                            ret_type = self.parse_type()
+                            
+                            self.consume('LPAREN')
+                            params = []
+                            if self.peek()['type'] != 'RPAREN':
+                                params.append(self.parse_parameter())
+                                while self.peek()['type'] == 'COMMA':
+                                    self.consume('COMMA')
+                                    params.append(self.parse_parameter())
+                            self.consume('RPAREN')
+                            
+                            # Puede haber '=' antes del bloque
+                            if self.peek()['type'] == 'ASSIGN':
+                                self.consume('ASSIGN')
+                            
+                            body = self.parse_block()
+                            declarations.append(Function(name=name_tok['value'], return_type=ret_type, params=params, body=body, lineno=name_tok['line']))
+                        
+                        else:
+                            # Es una variable: name: type [= value];
+                            var_type = self.parse_type()
+                            val = None
+                            if self.peek()['type'] == 'ASSIGN':
+                                self.consume('ASSIGN')
+                                val = self.parse_expression()
+                            self.consume('SEMI')
+                            declarations.append(VarDeclaration(name=name_tok['value'], type_name=var_type, value=val, lineno=name_tok['line']))
+                    else:
+                        raise Exception(f"Se esperaba ':' después de identificador en línea {name_tok['line']}")
+            
+            else:
+                raise Exception(f"Declaración no esperada: {tok['type']} en línea {tok['line']}")
+        
+        return Program(declarations=declarations)
+
         name = self.consume

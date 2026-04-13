@@ -10,8 +10,176 @@ Este módulo implementa el análisis semántico del compilador B-Minor, responsa
 
 from multimethod import multimethod
 from symtab import Symtab
-from typesys import check_binop, check_unaryop, loockup_type
 from model import *
+
+# =============== SISTEMA DE TIPOS ===============
+
+# Tipos básicos soportados
+TYPES = {
+    'integer': 'integer',
+    'boolean': 'boolean',
+    'string': 'string',
+    'float': 'float',
+    'void': 'void'
+}
+
+# Tabla de compatibilidad de operadores binarios
+BINOP_TABLE = {
+    '+': {
+        ('integer', 'integer'): 'integer',
+        ('float', 'float'): 'float',
+        ('string', 'string'): 'string',
+    },
+    '-': {
+        ('integer', 'integer'): 'integer',
+        ('float', 'float'): 'float',
+    },
+    '*': {
+        ('integer', 'integer'): 'integer',
+        ('float', 'float'): 'float',
+    },
+    '/': {
+        ('integer', 'integer'): 'integer',
+        ('float', 'float'): 'float',
+    },
+    '%': {
+        ('integer', 'integer'): 'integer',
+    },
+    '<': {
+        ('integer', 'integer'): 'boolean',
+        ('float', 'float'): 'boolean',
+    },
+    '<=': {
+        ('integer', 'integer'): 'boolean',
+        ('float', 'float'): 'boolean',
+    },
+    '>': {
+        ('integer', 'integer'): 'boolean',
+        ('float', 'float'): 'boolean',
+    },
+    '>=': {
+        ('integer', 'integer'): 'boolean',
+        ('float', 'float'): 'boolean',
+    },
+    '==': {
+        ('integer', 'integer'): 'boolean',
+        ('float', 'float'): 'boolean',
+        ('boolean', 'boolean'): 'boolean',
+        ('string', 'string'): 'boolean',
+    },
+    '!=': {
+        ('integer', 'integer'): 'boolean',
+        ('float', 'float'): 'boolean',
+        ('boolean', 'boolean'): 'boolean',
+        ('string', 'string'): 'boolean',
+    },
+    '&&': {
+        ('boolean', 'boolean'): 'boolean',
+    },
+    '||': {
+        ('boolean', 'boolean'): 'boolean',
+    },
+}
+
+# Tabla de compatibilidad de operadores unarios
+UNARYOP_TABLE = {
+    '-': {
+        'integer': 'integer',
+        'float': 'float',
+    },
+    '!': {
+        'boolean': 'boolean',
+    },
+}
+
+
+def check_binop(op, left_type, right_type):
+    """Verifica si una operación binaria es válida y retorna el tipo resultante.
+    
+    Args:
+        op: Operador binario ('+', '-', '*', '/', '%', '<', etc.)
+        left_type: Tipo del operando izquierdo
+        right_type: Tipo del operando derecho
+        
+    Returns:
+        Tupla (es_válido, tipo_resultado)
+        - es_válido: True si la operación es válida, False en caso contrario
+        - tipo_resultado: Tipo del resultado de la operación (o None si no es válida)
+    """
+    if op not in BINOP_TABLE:
+        return False, None
+    
+    key = (left_type, right_type)
+    if key in BINOP_TABLE[op]:
+        return True, BINOP_TABLE[op][key]
+    
+    return False, None
+
+
+def check_unaryop(op, operand_type):
+    """Verifica si una operación unaria es válida y retorna el tipo resultante.
+    
+    Args:
+        op: Operador unario ('-', '!')
+        operand_type: Tipo del operando
+        
+    Returns:
+        Tupla (es_válido, tipo_resultado)
+        - es_válido: True si la operación es válida, False en caso contrario
+        - tipo_resultado: Tipo del resultado de la operación (o None si no es válida)
+    """
+    if op not in UNARYOP_TABLE:
+        return False, None
+    
+    if operand_type in UNARYOP_TABLE[op]:
+        return True, UNARYOP_TABLE[op][operand_type]
+    
+    return False, None
+
+
+def loockup_type(type_name):
+    """Busca un tipo en la tabla de tipos (función con typo intencional para compatibilidad).
+    
+    Args:
+        type_name: Nombre del tipo a buscar
+        
+    Returns:
+        El nombre del tipo si existe, None en caso contrario
+    """
+    return TYPES.get(type_name)
+
+
+def is_valid_type(type_name):
+    """Verifica si un nombre de tipo es válido.
+    
+    Args:
+        type_name: Nombre del tipo a validar
+        
+    Returns:
+        True si el tipo es válido, False en caso contrario
+    """
+    return type_name in TYPES
+
+
+def are_compatible(type1, type2):
+    """Verifica si dos tipos son compatibles para asignación.
+    
+    Args:
+        type1: Primer tipo
+        type2: Segundo tipo
+        
+    Returns:
+        True si type2 puede asignarse a type1, False en caso contrario
+    """
+    if type1 == type2:
+        return True
+    
+    # Permitir conversiones automáticas si es necesario
+    # Por ahora, solo tipos exactos son compatibles
+    return False
+
+
+# =============== ANALIZADOR SEMÁNTICO ===============
 
 class SemanticChecker:
     """Verificador de semántica que implementa el patrón Visitor para recorrer el AST.

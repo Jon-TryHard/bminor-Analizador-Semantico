@@ -11,7 +11,6 @@ precisos durante el análisis semántico.
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-@dataclass
 class Node:
     """Clase base para todos los nodos del AST.
     
@@ -23,35 +22,40 @@ class Node:
 # =============== EXPRESIONES ===============
 
 @dataclass
-class IntLiteral(Node):
+class IntLiteral:
     """Representa un número entero literal (ej: 42)."""
     value: int
+    lineno: int = 0
 
 @dataclass
-class FloatLiteral(Node):
+class FloatLiteral:
     """Representa un número flotante literal (ej: 3.14)."""
     value: float
+    lineno: int = 0
 
 @dataclass
-class StringLiteral(Node):
+class StringLiteral:
     """Representa una cadena de texto literal (ej: "hola")."""
     value: str
+    lineno: int = 0
 
 @dataclass
-class BooleanLiteral(Node):
+class BooleanLiteral:
     """Representa un valor booleano literal (ej: true, false)."""
     value: bool
+    lineno: int = 0
 
 @dataclass
-class Identifier(Node):
+class Identifier:
     """Representa una referencia a un identificador (variable o función).
     
     El análisis semántico verificará que el identificador existe en la tabla de símbolos.
     """
     name: str
+    lineno: int = 0
 
 @dataclass
-class UnaryOp(Node):
+class UnaryOp:
     """Representa una operación unaria (ej: -x, !b).
     
     Atributos:
@@ -60,11 +64,12 @@ class UnaryOp(Node):
         type: Anotación con el tipo resultante (asignado durante análisis semántico)
     """
     op: str
-    operand: Node
+    operand: 'Node'
+    lineno: int = 0
     type: Optional[str] = None
 
 @dataclass
-class BinaryOp(Node):
+class BinaryOp:
     """Representa una operación binaria (ej: a + b, x < y).
     
     Atributos:
@@ -74,12 +79,13 @@ class BinaryOp(Node):
         type: Anotación con el tipo resultante (asignado durante análisis semántico)
     """
     op: str
-    left: Node
-    right: Node
+    left: 'Node'
+    right: 'Node'
+    lineno: int = 0
     type: Optional[str] = None
 
 @dataclass
-class FunctionCall(Node):
+class FunctionCall:
     """Representa una llamada a función (ej: print(x), sum(a, b)).
     
     Atributos:
@@ -88,13 +94,14 @@ class FunctionCall(Node):
         type: Anotación con el tipo de retorno de la función
     """
     name: str
-    args: List[Node]
+    args: List['Node']
+    lineno: int = 0
     type: Optional[str] = None
 
 # =============== SENTENCIAS (STATEMENTS) ===============
 
 @dataclass
-class VarDeclaration(Node):
+class VarDeclaration:
     """Representa la declaración de una variable (ej: x: integer = 10;).
     
     Atributos:
@@ -104,10 +111,11 @@ class VarDeclaration(Node):
     """
     name: str
     type_name: str
-    value: Optional[Node] = None
+    lineno: int = 0
+    value: Optional['Node'] = None
 
 @dataclass
-class Assignment(Node):
+class Assignment:
     """Representa la asignación a una variable ya declarada (ej: x = 20;).
     
     Se diferencia de VarDeclaration en que la variable ya debe estar declarada.
@@ -117,10 +125,11 @@ class Assignment(Node):
         value: Nueva expresión a asignar
     """
     name: str
-    value: Node
+    value: 'Node'
+    lineno: int = 0
 
 @dataclass
-class IfStmt(Node):
+class IfStmt:
     """Representa una sentencia condicional if-else.
     
     Atributos:
@@ -128,34 +137,37 @@ class IfStmt(Node):
         then_block: Lista de sentencias si la condición es verdadera
         else_block: Lista opcional de sentencias si la condición es falsa
     """
-    condition: Node
-    then_block: List[Node]
-    else_block: Optional[List[Node]] = None
+    condition: 'Node'
+    then_block: List['Node']
+    lineno: int = 0
+    else_block: Optional[List['Node']] = None
 
 @dataclass
-class WhileStmt(Node):
+class WhileStmt:
     """Representa un bucle while (ej: while (x > 0) { ... }).
     
     Atributos:
         condition: Expresión booleana a evaluar en cada iteración
         body: Lista de sentencias a ejecutar en cada iteración
     """
-    condition: Node
-    body: List[Node]
+    condition: 'Node'
+    body: List['Node']
+    lineno: int = 0
 
 @dataclass
-class ReturnStmt(Node):
+class ReturnStmt:
     """Representa una sentencia return.
     
     Atributos:
         expr: Expresión a retornar, o None para funciones void
     """
-    expr: Optional[Node] = None
+    lineno: int = 0
+    expr: Optional['Node'] = None
 
 # =============== ESTRUCTURAS SUPERIORES ===============
 
 @dataclass
-class Function(Node):
+class Function:
     """Representa la definición de una función.
     
     Atributos:
@@ -166,15 +178,17 @@ class Function(Node):
     """
     name: str
     return_type: str
-    params: List[VarDeclaration]
-    body: List[Node]
+    params: List['VarDeclaration']
+    body: List['Node']
+    lineno: int = 0
 
 @dataclass
-class Program(Node):
+class Program:
     """Raíz del árbol de sintaxis (el programa completo).
     
     Atributos:
         declarations: Lista de declaraciones de nivel superior
                      (puede contener funciones y/o variables globales)
     """
-    declarations: List[Node]
+    declarations: List['Node']
+    lineno: int = 0

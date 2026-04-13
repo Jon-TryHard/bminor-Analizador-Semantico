@@ -66,3 +66,25 @@ def run_test(filename):
 # 
 # for test_file in sorted(os.listdir('tests/bad')):
 #     run_test(f'tests/bad/{test_file}')
+
+# ============ INTERFAZ DE LÍNEA DE COMANDOS ============
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print("Uso: python main.py <archivo.bminor>")
+        print("Ejemplo: python main.py tests/good/good0.bminor")
+        sys.exit(1)
+    
+    # Ejecutar análisis semántico sobre el archivo especificado
+    filename = sys.argv[1]
+    if not os.path.exists(filename):
+        print(f"Error: Archivo '{filename}' no encontrado")
+        sys.exit(1)
+    
+    success = run_test(filename)
+    
+    if success:
+        print("\nsemantic check: success")
+        sys.exit(0)
+    else:
+        print("\nsemantic check: failed")
+        sys.exit(1)
