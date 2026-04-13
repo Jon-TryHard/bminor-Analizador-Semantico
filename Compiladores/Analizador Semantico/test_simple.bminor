@@ -1,3 +1,0 @@
-/* Simple test */
-x: integer = 5;
-y: integer = 10;
