@@ -282,10 +282,24 @@ class Parser:
 
     def parse_print(self):
         tok = self.consume('PRINT')
-        args = [self.parse_expression()]
-        while self.peek() and self.peek()['type'] == 'COMMA':
-            self.consume('COMMA')
-            args.append(self.parse_expression())
+        args = []
+
+        # print como instrucción: acepta formato con o sin paréntesis.
+        if self.peek() and self.peek()['type'] == 'LPAREN':
+            self.consume('LPAREN')
+            if self.peek() and self.peek()['type'] != 'RPAREN':
+                args.append(self.parse_expression())
+                while self.peek() and self.peek()['type'] == 'COMMA':
+                    self.consume('COMMA')
+                    args.append(self.parse_expression())
+            self.consume('RPAREN')
+        else:
+            if self.peek() and self.peek()['type'] != 'SEMI':
+                args.append(self.parse_expression())
+                while self.peek() and self.peek()['type'] == 'COMMA':
+                    self.consume('COMMA')
+                    args.append(self.parse_expression())
+
         self.consume('SEMI')
         return PrintStmt(args=args, lineno=tok['line'])
 
@@ -334,7 +348,9 @@ class Parser:
             name_tok = self.consume('ID')
             self.consume('COLON')
             if self.peek() and self.peek()['type'] == 'FUNC':
-                return self.parse_named_function_decl(name_tok)
+                raise Exception(
+                    f"No se permite declarar funciones dentro de bloques (línea {name_tok['line']})"
+                )
             var_type, array_sizes = self.parse_type()
             value = None
             if self.peek() and self.peek()['type'] == 'ASSIGN':

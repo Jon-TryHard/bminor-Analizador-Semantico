@@ -11,6 +11,6 @@ factorial: function integer (n: integer) = {
 main: function integer () = {
     num: integer = 5;
     result: integer = factorial(num, 1);
-    print "The factorial of ", num, " is ", result, "\n";
+    print ("The factorial of ", num, " is ", result, "\n");
     return 0;
 }
