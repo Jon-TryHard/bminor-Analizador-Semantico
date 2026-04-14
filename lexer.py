@@ -30,13 +30,14 @@ class Lexer:
             ('FALSE',      r'\bfalse\b'),                      # Booleano false
             ('TYPE',       r'\b(integer|boolean|char|string|float)\b'),  # Tipos
             ('RETURN',     r'\breturn\b'),                     # Palabra clave return
+            ('PRINT',      r'\bprint\b'),                      # Palabra clave print
             ('VOID',       r'\bvoid\b'),                       # Tipo void
             ('IF',         r'\bif\b'),                         # Palabra clave if
             ('ELSE',       r'\belse\b'),                       # Palabra clave else
             ('WHILE',      r'\bwhile\b'),                      # Palabra clave while
             ('FOR',        r'\bfor\b'),                        # Palabra clave for
             ('ARRAY',      r'\barray\b'),                      # Palabra clave array
-            ('FUNC',       r'\b(function|func)\b'),            # Palabra clave function
+            ('FUNC',       r'\bfunction\b'),                  # Palabra clave function
             ('ID',         r'[A-Za-z_][A-Za-z0-9_]*'),         # Identificadores
             
             # Operadores incluyendo comparación y lógicos
@@ -46,6 +47,9 @@ class Lexer:
             ('GEQ',        r'>='),                             # Operador >=
             ('AND',        r'&&'),                             # Operador &&
             ('OR',         r'\|\|'),                           # Operador ||
+            ('INC',        r'\+\+'),                           # Operador ++
+            ('DEC',        r'--'),                             # Operador --
+            ('POW',        r'\^'),                             # Operador ^
             ('LT',         r'<'),                              # Operador <
             ('GT',         r'>'),                              # Operador >
             ('PLUS',       r'\+'),                             # Operador +
@@ -70,8 +74,7 @@ class Lexer:
             # Espacios en blanco
             ('SPACE',      r'\s+'),                            # Espacios en blanco
         ]
-        # Compilar una expresión regular que reconoce cualquier token válido
-        self.tok_regex = '|'.join('(?P<%s>%s)' % pair for pair in self.token_specification)
+        self.tok_regex = re.compile('|'.join('(?P<%s>%s)' % pair for pair in self.token_specification))
 
     def tokenize(self, source):
         """Convierte el código fuente en una lista de tokens.
@@ -89,18 +92,27 @@ class Lexer:
         tokens = []
         line_num = 1  # Contador de líneas para reportes de error
         
-        # Buscar todos los coincidencias en el código fuente
-        for m in re.finditer(self.tok_regex, source):
-            # Identificar el tipo de token reconocido
+        # Tokenización estricta: no se permiten caracteres huérfanos.
+        pos = 0
+        length = len(source)
+        while pos < length:
+            m = self.tok_regex.match(source, pos)
+            if not m:
+                ch = source[pos]
+                if ch == '\n':
+                    line_num += 1
+                    pos += 1
+                    continue
+                raise Exception(f"Carácter inválido en línea {line_num}: {repr(ch)}")
+
             kind = m.lastgroup
             value = m.group()
-            
-            # Actualizar contador de líneas cuando hay saltos de línea
+            pos = m.end()
+
             if kind == 'SPACE':
                 line_num += value.count('\n')
-                continue  # No incluir espacios en blanco en la salida
-            
-            # Agregar el token a la lista con su información
+                continue
+
             tokens.append({
                 'type': kind,
                 'value': value,
@@ -124,7 +136,6 @@ class Lexer:
         """
         result = []
         i = 0
-        line_count = source.count('\n', 0, 0)
         
         while i < len(source):
             # Detectar comentario de bloque /* ... */

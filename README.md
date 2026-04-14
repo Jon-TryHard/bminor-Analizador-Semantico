@@ -54,58 +54,41 @@ bminor/
 - Librería `rich` (para impresión formateada de tablas de símbolos)
 
 Instalar dependencias:
+
 ```bash
 pip install multimethod rich
 ```
 
 ### Ejecución Básica
 
-Para analizar un archivo individual:
+Para analizar toda la batería de pruebas semánticas:
 
 ```bash
-python3 main.py
+python main.py
 ```
 
-En el archivo `main.py`, descomentar y ejecutar:
+Para analizar un archivo individual en modo semántico:
 
-```python
-from main import run_test
-
-# Analizar un archivo específico
-run_test('tests/good/good0.bminor')
-run_test('tests/bad/bad0.bminor')
-```
-
-### Ejecución en Lote
-
-Para analizar todos los archivos de prueba:
-
-```python
-import os
-from main import run_test
-
-# Pruebas válidas
-for test_file in sorted(os.listdir('tests/good')):
-    run_test(f'tests/good/{test_file}')
-
-# Pruebas con errores
-for test_file in sorted(os.listdir('tests/bad')):
-    run_test(f'tests/bad/{test_file}')
+```bash
+python main.py checker tests/good/good0.bminor
 ```
 
 ### Salida Esperada
 
 **Archivo sin errores semánticos:**
+
 ```
 Probando: tests/good/good0.bminor
-  [GOOD] Sin errores semánticos.
+    [GOOD] Sin errores semánticos.
+semantic check: success
 ```
 
 **Archivo con errores:**
+
 ```
 Probando: tests/bad/bad0.bminor
-  [BAD] Error semántico (línea 8): Identificador 'x' no declarado
-  [BAD] Error semántico (línea 13): La condición del 'while' debe ser boolean, se recibió 'integer'
+    [BAD] Error semántico (línea 8): Identificador 'x' no declarado
+semantic check: failed
 ```
 
 ---
@@ -157,6 +140,7 @@ La tabla de símbolos lanza excepciones para:
 #### 1.4. Búsqueda Léxica
 
 La búsqueda sigue la cadena padre-hijo:
+
 1. Busca en el alcance actual
 2. Si no encuentra, busca en el padre
 3. Continúa hasta el alcance global
@@ -186,18 +170,18 @@ class SemanticChecker:
         self.symtab = Symtab("global")
         self.errors = []
         self.current_return_type = None
-    
+
     @multimethod
     def visit(self, node: Program):
         # Procesa la raíz del programa
         for decl in node.declarations:
             self.visit(decl)
-    
+
     @multimethod
     def visit(self, node: VarDeclaration):
         # Procesa declaraciones de variables
         pass
-    
+
     @multimethod
     def visit(self, node: BinaryOp):
         # Procesa operaciones binarias
@@ -206,20 +190,20 @@ class SemanticChecker:
 
 ### 2.3. Métodos Implementados
 
-| Método | Tipo de Nodo | Responsabilidad |
-|--------|-------------|-----------------|
-| `visit(Program)` | Raíz del AST | Recorrer todas las declaraciones |
-| `visit(Function)` | Definición de función | Registrar función, crear alcance, verificar parámetros y cuerpo |
-| `visit(VarDeclaration)` | Declaración de variable | Verificar tipo válido, compatibilidad de inicializador, registrar en tabla |
-| `visit(Assignment)` | Asignación | Verificar variable declarada, compatibilidad de tipos |
-| `visit(IfStmt)` | Sentencia if | Verificar condición booleana, crear alcances para bloques |
-| `visit(WhileStmt)` | Sentencia while | Verificar condición booleana, crear alcance para cuerpo |
-| `visit(BinaryOp)` | Operación binaria | Verificar compatibilidad de operandos, anotar tipo resultante |
-| `visit(UnaryOp)` | Operación unaria | Verificar compatibilidad con operando, anotar tipo resultante |
-| `visit(FunctionCall)` | Llamada a función | Verificar función existe, argumentos coincidan, tipos sean compatibles |
-| `visit(ReturnStmt)` | Sentencia return | Verificar tipo retornado coincida con función |
-| `visit(Identifier)` | Identificador | Verificar variable/función declarada, devolver tipo |
-| `visit(IntLiteral/FloatLiteral/...)` | Literales | Devolver tipo primitivo |
+| Método                               | Tipo de Nodo            | Responsabilidad                                                            |
+| ------------------------------------ | ----------------------- | -------------------------------------------------------------------------- |
+| `visit(Program)`                     | Raíz del AST            | Recorrer todas las declaraciones                                           |
+| `visit(Function)`                    | Definición de función   | Registrar función, crear alcance, verificar parámetros y cuerpo            |
+| `visit(VarDeclaration)`              | Declaración de variable | Verificar tipo válido, compatibilidad de inicializador, registrar en tabla |
+| `visit(Assignment)`                  | Asignación              | Verificar variable declarada, compatibilidad de tipos                      |
+| `visit(IfStmt)`                      | Sentencia if            | Verificar condición booleana, crear alcances para bloques                  |
+| `visit(WhileStmt)`                   | Sentencia while         | Verificar condición booleana, crear alcance para cuerpo                    |
+| `visit(BinaryOp)`                    | Operación binaria       | Verificar compatibilidad de operandos, anotar tipo resultante              |
+| `visit(UnaryOp)`                     | Operación unaria        | Verificar compatibilidad con operando, anotar tipo resultante              |
+| `visit(FunctionCall)`                | Llamada a función       | Verificar función existe, argumentos coincidan, tipos sean compatibles     |
+| `visit(ReturnStmt)`                  | Sentencia return        | Verificar tipo retornado coincida con función                              |
+| `visit(Identifier)`                  | Identificador           | Verificar variable/función declarada, devolver tipo                        |
+| `visit(IntLiteral/FloatLiteral/...)` | Literales               | Devolver tipo primitivo                                                    |
 
 ---
 
@@ -232,17 +216,19 @@ class SemanticChecker:
 **Responsabilidad**: Convertir el código fuente en una secuencia de tokens
 
 **Clases principales**:
+
 - `Lexer`: Realiza la tokenización
 
 **Métodos clave**:
 
-| Método | Descripción |
-|--------|-------------|
-| `__init__()` | Define patrones regex para tokens (NUMBER, ID, TYPE, operators, etc.) |
-| `tokenize(source)` | Convierte código fuente en lista de diccionarios `{'type', 'value', 'line'}` |
-| `_remove_comments(source)` | Elimina comentarios `/* */` y `//` preservando saltos de línea |
+| Método                     | Descripción                                                                  |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| `__init__()`               | Define patrones regex para tokens (NUMBER, ID, TYPE, operators, etc.)        |
+| `tokenize(source)`         | Convierte código fuente en lista de diccionarios `{'type', 'value', 'line'}` |
+| `_remove_comments(source)` | Elimina comentarios `/* */` y `//` preservando saltos de línea               |
 
 **Tokens reconocidos**:
+
 - **Literales**: `NUMBER`, `FLOAT_LITERAL`, `STRING`, `CHAR`, `TRUE`, `FALSE`
 - **Palabras clave**: `IF`, `ELSE`, `WHILE`, `FOR`, `RETURN`, `FUNC`, `VOID`, `ARRAY`
 - **Tipos**: `TYPE` (integer, boolean, string, float, char)
@@ -251,6 +237,7 @@ class SemanticChecker:
 - **Puntuación**: `COLON`, `SEMI`, `COMMA`, `ASSIGN`
 
 **Ejemplo**:
+
 ```python
 lexer = Lexer()
 tokens = lexer.tokenize("x: integer = 5;")
@@ -265,6 +252,7 @@ tokens = lexer.tokenize("x: integer = 5;")
 ```
 
 **Limitaciones**:
+
 - No soporta comentarios anidados
 - Strings con escapes limitados
 - Sin soporte para notación científica en flotantes
@@ -276,27 +264,29 @@ tokens = lexer.tokenize("x: integer = 5;")
 **Responsabilidad**: Construir el Abstract Syntax Tree (AST) a partir de los tokens
 
 **Clases principales**:
+
 - `Parser`: Implementa análisis recursivo descendente
 
 **Métodos clave**:
 
-| Método | Descripción | Retorna |
-|--------|-------------|---------|
-| `parse()` | Punto de entrada, analiza el programa completo | `Program` |
-| `parse_type()` | Analiza tipos (simples y arrays) | String (ej: `"integer"`, `"array[integer]"`) |
-| `parse_expression()` | Analiza expresiones con operadores binarios | Nodo de expresión |
-| `parse_primary()` | Analiza elementos primarios (literales, identificadores, paréntesis) | Nodo primario |
-| `parse_statement()` | Analiza sentencias de nivel superior | `VarDeclaration`, `Assignment`, `IfStmt`, etc. |
-| `parse_block()` | Analiza bloques `{ ... }` | Lista de sentencias |
-| `parse_function()` | Analiza definiciones de función | `Function` |
-| `parse_parameter()` | Analiza parámetro formal de función | `VarDeclaration` |
-| `consume(type)` | Consume un token esperado, avanza posición | Diccionario del token |
-| `peek()` | Observa el token actual sin consumirlo | Diccionario del token |
+| Método               | Descripción                                                          | Retorna                                                           |
+| -------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `parse()`            | Punto de entrada, analiza el programa completo                       | `Program`                                                         |
+| `parse_type()`       | Analiza tipos (simples y arrays)                                     | String (ej: `"integer"`, `"array[integer]"`)                      |
+| `parse_expression()` | Analiza expresiones con operadores binarios                          | Nodo de expresión                                                 |
+| `parse_primary()`    | Analiza elementos primarios (literales, identificadores, paréntesis) | Nodo primario                                                     |
+| `parse_statement()`  | Analiza sentencias de nivel superior                                 | `VarDeclaration`, `Assignment`, `ArrayAssignment`, `IfStmt`, etc. |
+| `parse_block()`      | Analiza bloques `{ ... }`                                            | Lista de sentencias                                               |
+| `parse_function()`   | Analiza definiciones de función                                      | `Function`                                                        |
+| `parse_parameter()`  | Analiza parámetro formal de función                                  | `VarDeclaration`                                                  |
+| `consume(type)`      | Consume un token esperado, avanza posición                           | Diccionario del token                                             |
+| `peek()`             | Observa el token actual sin consumirlo                               | Diccionario del token                                             |
 
 **Jerarquía de Precedencia**:
+
 1. Literals, Identifiers, Parentheses (parse_primary)
 2. Unary operators (-, !)
-3. Multiplicative (*, /, %)
+3. Multiplicative (\*, /, %)
 4. Additive (+, -)
 5. Relational (<, <=, >, >=)
 6. Equality (==, !=)
@@ -305,6 +295,7 @@ tokens = lexer.tokenize("x: integer = 5;")
 9. Assignment (=)
 
 **Ejemplo**:
+
 ```python
 parser = Parser(tokens)
 ast = parser.parse()
@@ -312,10 +303,10 @@ ast = parser.parse()
 ```
 
 **Limitaciones**:
-- No soporta array initializers `{val1, val2}`
-- Sin acceso a elementos `arr[index]`
-- Sin soporte completo para bucles for
-- Sobrecarga de operadores limitada
+
+- No soporta sentencias `break` o `continue`
+- No soporta funciones anidadas
+- La validación de retorno en funciones es conservadora, no exhaustiva
 
 ---
 
@@ -326,31 +317,45 @@ ast = parser.parse()
 **Clases**:
 
 #### Expresiones
-- `IntLiteral(value, lineno)`: Número entero
-- `FloatLiteral(value, lineno)`: Número flotante  
-- `StringLiteral(value, lineno)`: String
-- `BooleanLiteral(value, lineno)`: Booleano
-- `Identifier(name, lineno)`: Referencia a variable/función
+
+- `IntLiteral(value, lineno, type)`: Número entero
+- `FloatLiteral(value, lineno, type)`: Número flotante
+- `StringLiteral(value, lineno, type)`: String
+- `CharLiteral(value, lineno, type)`: Carácter
+- `BooleanLiteral(value, lineno, type)`: Booleano
+- `Identifier(name, lineno, type)`: Referencia a variable/función
 - `UnaryOp(op, operand, lineno, type)`: Operación unaria
 - `BinaryOp(op, left, right, lineno, type)`: Operación binaria
 - `FunctionCall(name, args, lineno, type)`: Llamada a función
+- `IndexExpr(array, index, lineno, type)`: Acceso a elemento de arreglo
+- `ArrayLiteral(elements, lineno, type)`: Literal de arreglo
+- `PostfixOp(op, operand, lineno, type)`: Operador postfijo
 
 #### Sentencias
-- `VarDeclaration(name, type_name, lineno, value)`: Declaración variable
+
+- `VarDeclaration(name, type_name, lineno, value, array_sizes)`: Declaración variable
 - `Assignment(name, value, lineno)`: Asignación
+- `ArrayAssignment(array, index, value, lineno)`: Asignación a posición de arreglo
 - `IfStmt(condition, then_block, lineno, else_block)`: Sentencia if-else
 - `WhileStmt(condition, body, lineno)`: Bucle while
+- `ForStmt(init, condition, step, body, lineno)`: Bucle for
+- `PrintStmt(args, lineno)`: Sentencia print
+- `ExprStmt(expr, lineno)`: Sentencia de expresión
+- `BlockStmt(statements, lineno)`: Bloque de sentencias
 - `ReturnStmt(lineno, expr)`: Sentencia return
 
 #### Estructuras Superiores
+
 - `Function(name, return_type, params, body, lineno)`: Definición función
 - `Program(declarations, lineno)`: Raíz del árbol
 
 **Campos comunes**:
+
 - `lineno`: Número de línea para reportes de error
 - `type`: Tipo resultante (anotado durante análisis semántico)
 
 **Ejemplo**:
+
 ```python
 from model import *
 
@@ -368,22 +373,25 @@ expr = BinaryOp(op="+", left=Identifier("x"), right=IntLiteral(3), lineno=2)
 **Responsabilidad**: Gestionar la tabla de símbolos con soporte para alcances léxicos
 
 **Clases principales**:
+
 - `Symtab`: Tabla de símbolos con jerarquía padre-hijo
 
 **Métodos clave**:
 
-| Método | Descripción | Parámetros |
-|--------|-------------|-----------|
+| Método                   | Descripción                                   | Parámetros                           |
+| ------------------------ | --------------------------------------------- | ------------------------------------ |
 | `__init__(name, parent)` | Crea alcance con nombre y referencia al padre | `name`: str, `parent`: Symtab o None |
-| `add(symbol, node)` | Agrega símbolo al alcance actual | `symbol`: str, `node`: AST node |
-| `get(symbol)` | Busca símbolo respetando cadena padre | `symbol`: str |
-| `in_local(symbol)` | Verifica si símbolo está en alcance local | `symbol`: str |
+| `add(symbol, node)`      | Agrega símbolo al alcance actual              | `symbol`: str, `node`: AST node      |
+| `get(symbol)`            | Busca símbolo respetando cadena padre         | `symbol`: str                        |
+| `in_local(symbol)`       | Verifica si símbolo está en alcance local     | `symbol`: str                        |
 
 **Excepciones**:
+
 - `SymbolDefinedError`: Redeclaración en el mismo alcance
 - `SymbolConflictError`: Conflicto de tipos en redeclaración
 
 **Ejemplo**:
+
 ```python
 from symtab import Symtab
 
@@ -411,9 +419,11 @@ sym = func_tab.get("x")  # Encuentra en parent si no está en func_tab
 **Responsabilidad**: Verificar reglas semánticas y validar coherencia del programa
 
 **Clases principales**:
+
 - `SemanticChecker`: Implementa patrón Visitor para recorrer AST
 
 **Sistema de tipos (contiene)**:
+
 - `TYPES`: Diccionario de tipos soportados
 - `BINOP_TABLE`: Compatibilidad de operadores binarios
 - `UNARYOP_TABLE`: Compatibilidad de operadores unarios
@@ -421,30 +431,33 @@ sym = func_tab.get("x")  # Encuentra en parent si no está en func_tab
 
 **Métodos visitantes** (sobrecargados con `@multimethod`):
 
-| Método | Nodo | Verifica |
-|--------|------|----------|
-| `visit(Program)` | Raíz | Procesa todas las declaraciones |
-| `visit(Function)` | Función | Registra función, crea alcance, verifica parámetros y cuerpo |
-| `visit(VarDeclaration)` | Variable | Tipo válido, compatibilidad inicializador, registra símbolo |
-| `visit(Assignment)` | Asignación | Variable declarada, compatibilidad de tipos |
-| `visit(IfStmt)` | If | Condición booleana, crea alcances |
-| `visit(WhileStmt)` | While | Condición booleana, crea alcance |
-| `visit(BinaryOp)` | Bin.Op. | Compatibilidad operandos, anota tipo |
-| `visit(UnaryOp)` | Un.Op. | Compatibilidad operando, anota tipo |
-| `visit(FunctionCall)` | Llamada | Función existe, argumentos coinciden |
-| `visit(ReturnStmt)` | Return | Tipo retornado coincida con función |
-| `visit(Identifier)` | ID | Verificar declaración, devolver tipo |
-| `visit(IntLiteral/Float/...)` | Literal | Devolver tipo primitivo |
+| Método                        | Nodo       | Verifica                                                     |
+| ----------------------------- | ---------- | ------------------------------------------------------------ |
+| `visit(Program)`              | Raíz       | Procesa todas las declaraciones                              |
+| `visit(Function)`             | Función    | Registra función, crea alcance, verifica parámetros y cuerpo |
+| `visit(VarDeclaration)`       | Variable   | Tipo válido, compatibilidad inicializador, registra símbolo  |
+| `visit(Assignment)`           | Asignación | Variable declarada, compatibilidad de tipos                  |
+| `visit(IfStmt)`               | If         | Condición booleana, crea alcances                            |
+| `visit(WhileStmt)`            | While      | Condición booleana, crea alcance                             |
+| `visit(BinaryOp)`             | Bin.Op.    | Compatibilidad operandos, anota tipo                         |
+| `visit(UnaryOp)`              | Un.Op.     | Compatibilidad operando, anota tipo                          |
+| `visit(FunctionCall)`         | Llamada    | Función existe, argumentos coinciden                         |
+| `visit(ReturnStmt)`           | Return     | Tipo retornado coincida con función                          |
+| `visit(Identifier)`           | ID         | Verificar declaración, devolver tipo                         |
+| `visit(IntLiteral/Float/...)` | Literal    | Devolver tipo primitivo                                      |
 
 **Atributos**:
+
 - `symtab`: Tabla de símbolos actual (cambia al entrar/salir de alcances)
 - `errors`: Lista de errores acumulados
 - `current_return_type`: Tipo de retorno esperado de función actual
 
 **Métodos auxiliares**:
+
 - `report(message, line)`: Registra error semántico
 
 **Ejemplo**:
+
 ```python
 from checker import SemanticChecker
 
@@ -466,11 +479,12 @@ else:
 
 **Funciones principales**:
 
-| Función | Descripción | Retorna |
-|---------|-------------|---------|
+| Función              | Descripción                             | Retorna               |
+| -------------------- | --------------------------------------- | --------------------- |
 | `run_test(filename)` | Ejecuta análisis completo en un archivo | bool (True si válido) |
 
 **Flujo**:
+
 1. Lee archivo fuente
 2. Ejecuta Lexer (tokenización)
 3. Ejecuta Parser (construcción AST)
@@ -478,34 +492,29 @@ else:
 5. Imprime resultados
 
 **Interfaz de línea de comandos**:
+
 ```bash
-python main.py archivo.bminor
+python main.py
+python main.py checker archivo.bminor
+python main.py archivo.bminor --semantic
 ```
 
 **Salida**:
+
 - `semantic check: success` si sin errores (exit code 0)
 - `semantic check: failed` si con errores (exit code 1)
 
 ---
 
-### 7. **run_tests.py** - Script de Pruebas
+### 7. **main.py** - Ejecución por lote y por archivo
 
-**Responsabilidad**: Ejecutar batería de pruebas en lote
+**Responsabilidad**: Ejecutar lexer, parser y checker sobre un archivo específico o la batería completa.
 
-**Función principal**:
-- `run_tests(directory)`: Ejecuta todos los archivos `.bminor` en un directorio
+**Modos de uso**:
 
-**Lógica**:
-- Archivos en `tests/good/` deben pasar (exit code 0)
-- Archivos en `tests/bad/` deben fallar (exit code != 0)
-- Compara con expectativa y reporta resultado
-
-**Ejemplo**:
-```bash
-python run_tests.py
-# Prueba tests/good/* y tests/bad/*
-# Reporta: Correctas: X/20, Incorrectas: Y/20
-```
+- `python main.py` ejecuta toda la batería de pruebas semánticas.
+- `python main.py checker tests/good/good0.bminor` ejecuta un archivo en modo semántico.
+- `python main.py tests/good/good0.bminor --semantic` conserva compatibilidad con la interfaz anterior.
 
 ---
 
@@ -521,7 +530,7 @@ ENTRADA: archivo.bminor
 1. main.py lee el archivo
     ↓
 2. lexer.py tokeniza
-   "x: integer = 5;" 
+   "x: integer = 5;"
    → [{'type':'ID', 'value':'x'}, {'type':'COLON'}, ...]
     ↓
 3. parser.py construye AST
@@ -543,17 +552,15 @@ SALIDA: Código de salida + mensajes de error (si aplica)
 
 ---
 
-
-
 El sistema soporta los siguientes tipos de datos primitivos:
 
-| Tipo | Descripción | Ejemplo |
-|------|-------------|---------|
-| `integer` | Números enteros | `x: integer = 42;` |
-| `boolean` | Valores booleanos | `b: boolean = true;` |
-| `float` | Números con punto flotante | `f: float = 3.14;` |
-| `string` | Cadenas de texto | `s: string = "hola";` |
-| `char` | Caracteres individuales | `c: char = 'a';` |
+| Tipo      | Descripción                | Ejemplo               |
+| --------- | -------------------------- | --------------------- |
+| `integer` | Números enteros            | `x: integer = 42;`    |
+| `boolean` | Valores booleanos          | `b: boolean = true;`  |
+| `float`   | Números con punto flotante | `f: float = 3.14;`    |
+| `string`  | Cadenas de texto           | `s: string = "hola";` |
+| `char`    | Caracteres individuales    | `c: char = 'a';`      |
 
 ### Compatibilidad de Tipos
 
@@ -573,37 +580,44 @@ Las reglas de compatibilidad se verifican mediante funciones en `typesys.py` (m�
 ### 4.1. Declaraciones (Regla 5.1)
 
 ✅ **Verificar declaración previa**
+
 - Cada identificador debe declararse antes de usarse
 - Se busca en la tabla de símbolos respetando alcances
 
 ✅ **Prevenir redeclaraciones**
+
 - No se permite redeclarar un símbolo en el mismo alcance
 - Se lanza `SymbolDefinedError` si se intenta
 
 ✅ **Permitir sombreado (shadowing)**
+
 - Una variable puede ocultarse en alcances internos
 - El acceso siempre usa la versión más cercana
 
 ### 4.2. Alcances Léxicos (Regla 5.2)
 
 ✅ **Crear alcances para estructuras**
+
 - Funciones crean nuevo alcance
 - Bloques `{ }` crean nuevo alcance
 - Parámetros se registran en alcance de función
 
 ✅ **Gestionar entrada y salida**
+
 - Al entrar a un alcance, se crea una tabla hija
 - Al salir, se restaura la tabla padre
 
 ### 4.3. Chequeo de Tipos (Regla 5.3)
 
 ✅ **Verificar compatibilidad en asignaciones**
+
 ```bminor
 x: integer = 5;    // válido
 x = true;          // error: no se puede asignar boolean a integer
 ```
 
 ✅ **Verificar operadores aritméticos**
+
 ```bminor
 a: integer = 3;
 b: integer = 4;
@@ -612,6 +626,7 @@ d: integer = a + true; // error: boolean no es valido en operación +
 ```
 
 ✅ **Verificar operadores relacionales**
+
 ```bminor
 x: integer = 5;
 b: boolean = x < 10;    // válido
@@ -619,6 +634,7 @@ c: boolean = x < true;  // error: no se pueden comparar integer y boolean
 ```
 
 ✅ **Verificar operadores lógicos**
+
 ```bminor
 b1: boolean = true;
 b2: boolean = b1 && false;  // válido
@@ -629,6 +645,7 @@ b3: boolean = x && true;    // error: operador && requiere boolean
 ### 4.4. Condiciones (Regla 6.5)
 
 ✅ **Condiciones de if/while booleanas**
+
 ```bminor
 if (true) { }           // válido
 if (x > 5) { }          // válido (x > 5 es boolean)
@@ -638,10 +655,12 @@ if (x) { }              // error: se requiere boolean, se recibió integer
 ### 4.5. Funciones (Regla 5.4)
 
 ✅ **Verificación de definición**
+
 - La función debe estar declarada antes de llamarla
 - Se registra en la tabla de símbolos global
 
 ✅ **Compatibilidad de argumentos**
+
 ```bminor
 f: function integer (x: integer, y: integer) = { return x + y; }
 
@@ -651,6 +670,7 @@ f(5);            // error: se espera 2 argumentos, se recibió 1
 ```
 
 ✅ **Compatibilidad de retornos**
+
 ```bminor
 f: function integer (x: integer) = {
     return x + 1;          // válido
@@ -664,6 +684,7 @@ g: function integer (x: integer) = {
 ### 4.6. Expresiones (Regla 5.5)
 
 ✅ **Anotación de tipos**
+
 - Cada expresión se anota con su tipo resultante
 - Se almacena en atributo `node.type`
 - Se usa por nodos superiores en el árbol
@@ -675,27 +696,33 @@ g: function integer (x: integer) = {
 ### No Implementados
 
 ❌ **Arreglos**
+
 - El sistema actualmente NO soporta tipos arreglo `integer[10]`
 - Indexación no se contempla
 - Necesitaría extensión del sistema de tipos
 
 ❌ **Estructuras (structs)**
+
 - No hay soporte para tipos compuestos
 - Miembro acceso no se verifica
 
 ❌ **Verificación de retorno en todas las rutas**
+
 - No se valida que toda rama de una función retorne un valor
 - Especialmente relevante para funciones con condiciones
 
 ❌ **Conversiones implícitas**
+
 - No se permiten conversiones entre tipos
 - `integer` y `float` se tratan como incompatibles
 
 ❌ **Operadores adicionales**
+
 - Se pueden agregar operadores como `<<`, `>>`, `^` en futuras versiones
 - Módulo `typesys.py` mantiene tablas de compatibilidad
 
 ❌ **Módulos e imports**
+
 - No hay soporte para incluir otros archivos
 - Todo debe estar en un único archivo fuente
 
@@ -758,6 +785,7 @@ Error semántico (línea 56): Se esperaba retorno de tipo integer, pero se obtuv
 ```
 
 Cada error incluye:
+
 - Tipo de error
 - Identificador o construcción involucrada
 - Número de línea exacto

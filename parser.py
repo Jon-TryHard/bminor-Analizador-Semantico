@@ -1,381 +1,455 @@
 """Análisis sintáctico para el lenguaje B-Minor.
 
-Este módulo implementa un parser que construye el Abstract Syntax Tree (AST)
-a partir de la secuencia de tokens generada por el análisis léxico.
-
-Utiliza un análisis recursivo descendente (recursive descent parsing) para
-interpretar la gramática del lenguaje.
+Este módulo implementa un parser recursivo descendente para construir el AST
+desde la secuencia de tokens producida por el lexer.
 """
 
-import re
 from model import *
 
+
 class Parser:
-    """Parser recursivo descendente para B-Minor.
-    
-    Atributos:
-        tokens: Lista de tokens a procesar
-        pos: Posición actual en la secuencia de tokens
-    """
-    
+    """Parser recursivo descendente para B-Minor."""
+
+    PRECEDENCE = {
+        'OR': 1,
+        'AND': 2,
+        'EQL': 3,
+        'NEQ': 3,
+        'LT': 4,
+        'LEQ': 4,
+        'GT': 4,
+        'GEQ': 4,
+        'PLUS': 5,
+        'MINUS': 5,
+        'MULT': 6,
+        'DIV': 6,
+        'MOD': 6,
+        'POW': 7,
+    }
+
     def __init__(self, tokens):
-        """Inicializa el parser con una secuencia de tokens.
-        
-        Args:
-            tokens: Lista de diccionarios con estructura {'type', 'value', 'line'}
-        """
         self.tokens = tokens
         self.pos = 0
 
-    def peek(self):
-        """Obtiene el token actual sin consumirlo.
-        
-        Returns:
-            Diccionario del token actual, o None si se alcanzó el final
-        """
-        if self.pos < len(self.tokens):
-            return self.tokens[self.pos]
+    def peek(self, offset=0):
+        idx = self.pos + offset
+        if idx < len(self.tokens):
+            return self.tokens[idx]
         return None
 
     def consume(self, expected_type=None):
-        """Consume el token actual y avanza el posicionador.
-        
-        Args:
-            expected_type: Tipo de token esperado (opcional, para validación)
-            
-        Returns:
-            Diccionario del token consumido
-            
-        Raises:
-            Exception: Si se alcanzó fin de archivo inesperadamente
-                      o si el token no coincide con el tipo esperado
-        """
         tok = self.peek()
         if not tok:
             raise Exception("Fin de archivo inesperado")
         if expected_type and tok['type'] != expected_type:
-            raise Exception(f"Se esperaba {expected_type} en línea {tok['line']}, pero se obtuvo {tok['type']}")
+            raise Exception(
+                f"Se esperaba {expected_type} en línea {tok['line']}, pero se obtuvo {tok['type']}"
+            )
         self.pos += 1
         return tok
 
-    # =============== ANÁLISIS DE EXPRESIONES ===============
+    def _line(self):
+        tok = self.peek()
+        return tok['line'] if tok else 0
 
-    def parse_expression(self):
-        """Analiza una expresión con operadores binarios.
-        
-        Maneja identificadores, números y operaciones binarias básicas.
-        El análisis es iterativo para construir árboles correctos de operaciones.
-        
-        Returns:
-            Nodo del AST representando la expresión
-        """
-        # Comienza con el operando primario izquierdo
-        left = self.parse_primary()
-        
-        # Procesar operadores binarios
-        while self.peek():
-            tok_type = self.peek()['type']
-            # Soportar todos los tipos de operadores binarios
-            if tok_type in ('PLUS', 'MINUS', 'MULT', 'DIV', 'MOD', 'LT', 'GT', 'LEQ', 'GEQ', 'EQL', 'NEQ', 'AND', 'OR'):
-                op_tok = self.consume()
-                right = self.parse_primary()
-                left = BinaryOp(op=op_tok['value'], left=left, right=right, lineno=op_tok['line'])
-            else:
+    # ---------- Tipos ----------
+
+    def parse_type(self):
+        tok = self.peek()
+        if not tok:
+            raise Exception("Tipo esperado al final del archivo")
+
+        if tok['type'] == 'ARRAY':
+            self.consume('ARRAY')
+            self.consume('LBRACKET')
+            size_expr = None
+            if self.peek() and self.peek()['type'] != 'RBRACKET':
+                if self.peek()['type'] == 'NUMBER':
+                    num_tok = self.consume('NUMBER')
+                    size_expr = IntLiteral(value=int(num_tok['value']), lineno=num_tok['line'])
+                elif self.peek()['type'] == 'ID':
+                    id_tok = self.consume('ID')
+                    size_expr = Identifier(name=id_tok['value'], lineno=id_tok['line'])
+                else:
+                    bad = self.peek()
+                    raise Exception(f"Tamaño de array inválido en línea {bad['line']}")
+            self.consume('RBRACKET')
+            base, nested_sizes = self.parse_type()
+            # Normalizar tipos de array: "array_of_BASE"
+            sizes = []
+            if size_expr is not None:
+                sizes.append(size_expr)
+            sizes.extend(nested_sizes)
+            return f"array_of_{base}", sizes
+
+        if tok['type'] == 'TYPE':
+            return self.consume('TYPE')['value'], []
+
+        if tok['type'] == 'VOID':
+            return self.consume('VOID')['value'], []
+
+        raise Exception(f"Tipo esperado en línea {tok['line']}, pero se obtuvo {tok['type']}")
+
+    # ---------- Expresiones ----------
+
+    def parse_expression(self, min_prec=1):
+        left = self.parse_unary()
+
+        while True:
+            op_tok = self.peek()
+            if not op_tok:
                 break
-        
+
+            op_type = op_tok['type']
+            prec = self.PRECEDENCE.get(op_type)
+            if prec is None or prec < min_prec:
+                break
+
+            self.consume()
+            # '^' se considera asociativo por la derecha.
+            next_min_prec = prec if op_type == 'POW' else prec + 1
+            right = self.parse_expression(next_min_prec)
+            left = BinaryOp(op=op_tok['value'], left=left, right=right, lineno=op_tok['line'])
+
         return left
 
-    def parse_primary(self):
-        """Analiza una expresión primaria (literal, identificador o llamada a función).
-        
-        Incluye operadores unarios (-x, !x) y literales booleanos.
-        
-        Returns:
-            Nodo del AST representando la expresión primaria
-            
-        Raises:
-            Exception: Si la expresión no es válida
-        """
+    def parse_unary(self):
         tok = self.peek()
-        
-        # Operadores unarios
+        if not tok:
+            raise Exception("Expresión esperada al final del archivo")
+
         if tok['type'] in ('MINUS', 'NOT', 'PLUS'):
             op_tok = self.consume()
-            operand = self.parse_primary()
+            operand = self.parse_unary()
             return UnaryOp(op=op_tok['value'], operand=operand, lineno=op_tok['line'])
-        
-        # Paréntesis para agrupar expresiones
+
+        return self.parse_postfix()
+
+    def parse_postfix(self):
+        node = self.parse_primary()
+
+        while True:
+            tok = self.peek()
+            if not tok:
+                break
+
+            if tok['type'] == 'LPAREN':
+                if not isinstance(node, Identifier):
+                    raise Exception(f"Llamada inválida en línea {tok['line']}")
+                self.consume('LPAREN')
+                args = []
+                if self.peek() and self.peek()['type'] != 'RPAREN':
+                    args.append(self.parse_expression())
+                    while self.peek() and self.peek()['type'] == 'COMMA':
+                        self.consume('COMMA')
+                        args.append(self.parse_expression())
+                self.consume('RPAREN')
+                node = FunctionCall(name=node.name, args=args, lineno=tok['line'])
+                continue
+
+            if tok['type'] == 'LBRACKET':
+                self.consume('LBRACKET')
+                index = self.parse_expression()
+                self.consume('RBRACKET')
+                node = IndexExpr(array=node, index=index, lineno=tok['line'])
+                continue
+
+            if tok['type'] in ('INC', 'DEC'):
+                op_tok = self.consume()
+                node = PostfixOp(op=op_tok['value'], operand=node, lineno=op_tok['line'])
+                continue
+
+            break
+
+        return node
+
+    def parse_primary(self):
+        tok = self.peek()
+        if not tok:
+            raise Exception("Expresión esperada al final del archivo")
+
         if tok['type'] == 'LPAREN':
             self.consume('LPAREN')
             expr = self.parse_expression()
             self.consume('RPAREN')
             return expr
-        
+
+        if tok['type'] == 'LBRACE':
+            line = tok['line']
+            self.consume('LBRACE')
+            elements = []
+            if self.peek() and self.peek()['type'] != 'RBRACE':
+                elements.append(self.parse_expression())
+                while self.peek() and self.peek()['type'] == 'COMMA':
+                    self.consume('COMMA')
+                    elements.append(self.parse_expression())
+            self.consume('RBRACE')
+            return ArrayLiteral(elements=elements, lineno=line)
+
         tok = self.consume()
-        
-        # Número entero literal
+
         if tok['type'] == 'NUMBER':
             return IntLiteral(value=int(tok['value']), lineno=tok['line'])
-        
-        # Número flotante literal
         if tok['type'] == 'FLOAT_LITERAL':
             return FloatLiteral(value=float(tok['value']), lineno=tok['line'])
-        
-        # Booleanos
-        if tok['type'] in ('TRUE', 'FALSE'):
-            value = tok['type'] == 'TRUE'
-            return BooleanLiteral(value=value, lineno=tok['line'])
-        
-        # String literal
+        if tok['type'] == 'TRUE':
+            return BooleanLiteral(value=True, lineno=tok['line'])
+        if tok['type'] == 'FALSE':
+            return BooleanLiteral(value=False, lineno=tok['line'])
         if tok['type'] == 'STRING':
-            # Remover comillas
             value = tok['value'][1:-1]
-            # Procesar escapes básicos
             value = value.replace('\\n', '\n').replace('\\t', '\t').replace('\\\\', '\\')
             return StringLiteral(value=value, lineno=tok['line'])
-        
-        # Char literal
         if tok['type'] == 'CHAR':
-            # Remover comillas
             value = tok['value'][1:-1]
-            return StringLiteral(value=value, lineno=tok['line'])
-        
-        # Identificador (posiblemente seguido de parámetros si es llamada a función)
+            return CharLiteral(value=value, lineno=tok['line'])
         if tok['type'] == 'ID':
-            # Verificar si es una llamada a función
-            if self.peek() and self.peek()['type'] == 'LPAREN':
-                self.consume('LPAREN')
-                args = []
-                # Procesar lista de argumentos si no está vacía
-                if self.peek()['type'] != 'RPAREN':
-                    args.append(self.parse_expression())
-                    # Procesar argumentos adicionales separados por comas
-                    while self.peek()['type'] == 'COMMA':
-                        self.consume('COMMA')
-                        args.append(self.parse_expression())
-                self.consume('RPAREN')
-                return FunctionCall(name=tok['value'], args=args, lineno=tok['line'])
-            
-            # Es solo un identificador (referencia a variable)
             return Identifier(name=tok['value'], lineno=tok['line'])
-        
+
         raise Exception(f"Expresión inválida en línea {tok['line']}: {tok['type']}")
 
-    # =============== ANÁLISIS DE SENTENCIAS ===============
-
-    def parse_statement(self):
-        """Analiza una sentencia (declaración, asignación, control, etc.).
-        
-        Returns:
-            Nodo del AST representando la sentencia
-            
-        Raises:
-            Exception: Si la sentencia no es reconocida
-        """
-        tok = self.peek()
-        
-        # Sentencia return
-        if tok['type'] == 'RETURN':
-            self.consume('RETURN')
-            expr = self.parse_expression()
-            self.consume('SEMI')
-            return ReturnStmt(expr=expr, lineno=tok['line'])
-        
-        # Declaración o asignación (diferenciadas por ':' o '=')
-        elif tok['type'] == 'ID':
-            name_tok = self.consume('ID')
-            
-            # Declaración de variable: nombre : tipo [= valor];
-            if self.peek()['type'] == 'COLON':
-                self.consume('COLON')
-                t_tok = self.consume('TYPE')
-                val = None
-                # Inicializador opcional
-                if self.peek()['type'] == 'ASSIGN':
-                    self.consume('ASSIGN')
-                    val = self.parse_expression()
-                self.consume('SEMI')
-                return VarDeclaration(name=name_tok['value'], type_name=t_tok['value'], value=val, lineno=name_tok['line'])
-            
-            # Asignación a variable: nombre = valor;
-            else:
-                self.consume('ASSIGN')
-                val = self.parse_expression()
-                self.consume('SEMI')
-                return Assignment(name=name_tok['value'], value=val, lineno=name_tok['line'])
-
-        # Sentencia condicional if
-        elif tok['type'] == 'IF':
-            self.consume('IF')
-            self.consume('LPAREN')
-            cond = self.parse_expression()
-            self.consume('RPAREN')
-            then_b = self.parse_block()
-            # Rama else opcional
-            else_b = None
-            if self.peek() and self.peek()['type'] == 'ELSE':
-                self.consume('ELSE')
-                else_b = self.parse_block()
-            return IfStmt(condition=cond, then_block=then_b, else_block=else_b, lineno=tok['line'])
-
-        raise Exception(f"Sentencia no reconocida: {tok['type']} en línea {tok['line']}")
-
-    # =============== ANÁLISIS DE BLOQUES ===============
+    # ---------- Sentencias ----------
 
     def parse_block(self):
-        """Analiza un bloque de sentencias entre llaves: { ... }
-        
-        Returns:
-            Lista de nodos del AST representando las sentencias del bloque
-        """
-        self.consume('LBRACE')
+        lbrace = self.consume('LBRACE')
         statements = []
-        # Procesar sentencias hasta encontrar la llave de cierre
         while self.peek() and self.peek()['type'] != 'RBRACE':
             statements.append(self.parse_statement())
         self.consume('RBRACE')
-        return statements
+        return BlockStmt(statements=statements, lineno=lbrace['line'])
 
-    def parse_function(self):
-        self.consume('FUNC')
-        name_tok = self.consume('ID')
+    def parse_if(self):
+        tok = self.consume('IF')
         self.consume('LPAREN')
+        cond = self.parse_expression()
+        self.consume('RPAREN')
+
+        then_stmt = self.parse_statement()
+        then_block = then_stmt.statements if isinstance(then_stmt, BlockStmt) else [then_stmt]
+
+        else_block = None
+        if self.peek() and self.peek()['type'] == 'ELSE':
+            self.consume('ELSE')
+            else_stmt = self.parse_statement()
+            else_block = else_stmt.statements if isinstance(else_stmt, BlockStmt) else [else_stmt]
+
+        return IfStmt(condition=cond, then_block=then_block, else_block=else_block, lineno=tok['line'])
+
+    def parse_while(self):
+        tok = self.consume('WHILE')
+        self.consume('LPAREN')
+        cond = self.parse_expression()
+        self.consume('RPAREN')
+
+        body_stmt = self.parse_statement()
+        body = body_stmt.statements if isinstance(body_stmt, BlockStmt) else [body_stmt]
+        return WhileStmt(condition=cond, body=body, lineno=tok['line'])
+
+    def parse_for_clause_assignment_or_expr(self):
+        expr = self.parse_expression()
+        if self.peek() and self.peek()['type'] == 'ASSIGN':
+            assign_tok = self.consume('ASSIGN')
+            value = self.parse_expression()
+            if isinstance(expr, Identifier):
+                return Assignment(name=expr.name, value=value, lineno=expr.lineno)
+            if isinstance(expr, IndexExpr):
+                return ArrayAssignment(array=expr.array, index=expr.index, value=value, lineno=expr.lineno)
+            raise Exception(f"Asignación inválida en línea {assign_tok['line']}")
+        return expr
+
+    def parse_for(self):
+        tok = self.consume('FOR')
+        self.consume('LPAREN')
+
+        init = None
+        if self.peek() and self.peek()['type'] != 'SEMI':
+            init = self.parse_for_clause_assignment_or_expr()
+        self.consume('SEMI')
+
+        condition = None
+        if self.peek() and self.peek()['type'] != 'SEMI':
+            condition = self.parse_expression()
+        self.consume('SEMI')
+
+        step = None
+        if self.peek() and self.peek()['type'] != 'RPAREN':
+            step = self.parse_for_clause_assignment_or_expr()
+        self.consume('RPAREN')
+
+        body_stmt = self.parse_statement()
+        body = body_stmt.statements if isinstance(body_stmt, BlockStmt) else [body_stmt]
+        return ForStmt(init=init, condition=condition, step=step, body=body, lineno=tok['line'])
+
+    def parse_print(self):
+        tok = self.consume('PRINT')
+        args = [self.parse_expression()]
+        while self.peek() and self.peek()['type'] == 'COMMA':
+            self.consume('COMMA')
+            args.append(self.parse_expression())
+        self.consume('SEMI')
+        return PrintStmt(args=args, lineno=tok['line'])
+
+    def parse_return(self):
+        tok = self.consume('RETURN')
+        expr = None
+        if self.peek() and self.peek()['type'] != 'SEMI':
+            expr = self.parse_expression()
+        self.consume('SEMI')
+        return ReturnStmt(expr=expr, lineno=tok['line'])
+
+    def parse_var_decl_from_name(self, name_tok):
+        self.consume('COLON')
+        var_type, array_sizes = self.parse_type()
+        value = None
+        if self.peek() and self.peek()['type'] == 'ASSIGN':
+            self.consume('ASSIGN')
+            value = self.parse_expression()
+        self.consume('SEMI')
+        return VarDeclaration(name=name_tok['value'], type_name=var_type, value=value, lineno=name_tok['line'], array_sizes=array_sizes)
+
+    def parse_statement(self):
+        tok = self.peek()
+        if not tok:
+            raise Exception("Sentencia esperada al final del archivo")
+
+        if tok['type'] == 'LBRACE':
+            return self.parse_block()
+
+        if tok['type'] == 'IF':
+            return self.parse_if()
+
+        if tok['type'] == 'WHILE':
+            return self.parse_while()
+
+        if tok['type'] == 'FOR':
+            return self.parse_for()
+
+        if tok['type'] == 'RETURN':
+            return self.parse_return()
+
+        if tok['type'] == 'PRINT':
+            return self.parse_print()
+
+        if tok['type'] == 'ID' and self.peek(1) and self.peek(1)['type'] == 'COLON':
+            name_tok = self.consume('ID')
+            self.consume('COLON')
+            if self.peek() and self.peek()['type'] == 'FUNC':
+                return self.parse_named_function_decl(name_tok)
+            var_type, array_sizes = self.parse_type()
+            value = None
+            if self.peek() and self.peek()['type'] == 'ASSIGN':
+                self.consume('ASSIGN')
+                value = self.parse_expression()
+            self.consume('SEMI')
+            return VarDeclaration(name=name_tok['value'], type_name=var_type, value=value, lineno=name_tok['line'], array_sizes=array_sizes)
+
+        if tok['type'] == 'ID' and self.peek(1) and self.peek(1)['type'] == 'ASSIGN':
+            expr = self.parse_expression()
+            self.consume('ASSIGN')
+            value = self.parse_expression()
+            self.consume('SEMI')
+            if isinstance(expr, Identifier):
+                return Assignment(name=expr.name, value=value, lineno=expr.lineno)
+            if isinstance(expr, IndexExpr):
+                return ArrayAssignment(array=expr.array, index=expr.index, value=value, lineno=expr.lineno)
+            raise Exception(f"Asignación inválida en línea {tok['line']}")
+
+        if tok['type'] == 'ID' and self.peek(1) and self.peek(1)['type'] == 'LBRACKET':
+            expr = self.parse_expression()
+            if self.peek() and self.peek()['type'] == 'ASSIGN':
+                self.consume('ASSIGN')
+                value = self.parse_expression()
+                self.consume('SEMI')
+                if isinstance(expr, IndexExpr):
+                    return ArrayAssignment(array=expr.array, index=expr.index, value=value, lineno=expr.lineno)
+                raise Exception(f"Asignación inválida en línea {tok['line']}")
+            self.consume('SEMI')
+            return ExprStmt(expr=expr, lineno=tok['line'])
+
+        expr = self.parse_expression()
+        if self.peek() and self.peek()['type'] == 'ASSIGN':
+            assign_tok = self.consume('ASSIGN')
+            value = self.parse_expression()
+            self.consume('SEMI')
+            if isinstance(expr, Identifier):
+                return Assignment(name=expr.name, value=value, lineno=expr.lineno)
+            if isinstance(expr, IndexExpr):
+                return ArrayAssignment(array=expr.array, index=expr.index, value=value, lineno=expr.lineno)
+            raise Exception(f"Asignación inválida en línea {assign_tok['line']}")
+        self.consume('SEMI')
+        return ExprStmt(expr=expr, lineno=tok['line'])
+
+    # ---------- Funciones y programa ----------
+
+    def parse_parameter(self):
+        name = self.consume('ID')
+        self.consume('COLON')
+        t_type, array_sizes = self.parse_type()
+        return VarDeclaration(name=name['value'], type_name=t_type, lineno=name['line'], array_sizes=array_sizes)
+
+    def parse_parameter_list(self):
         params = []
-        if self.peek()['type'] != 'RPAREN':
+        self.consume('LPAREN')
+        if self.peek() and self.peek()['type'] != 'RPAREN':
             params.append(self.parse_parameter())
-            while self.peek()['type'] == 'COMMA':
+            while self.peek() and self.peek()['type'] == 'COMMA':
                 self.consume('COMMA')
                 params.append(self.parse_parameter())
         self.consume('RPAREN')
-        
-        self.consume('COLON')
-        ret_type = self.consume('TYPE')['value']
-        
-        # B-Minor a veces usa '=' antes del bloque de función
-        if self.peek()['type'] == 'ASSIGN':
+        return params
+
+    def parse_named_function_decl(self, name_tok):
+        self.consume('FUNC')
+        ret_type, _ = self.parse_type()
+        params = self.parse_parameter_list()
+
+        if self.peek() and self.peek()['type'] == 'ASSIGN':
             self.consume('ASSIGN')
-            
-        body = self.parse_block()
-        return Function(name=name_tok['value'], return_type=ret_type, params=params, body=body, lineno=name_tok['line'])
+            body_block = self.parse_block()
+            return Function(name=name_tok['value'], return_type=ret_type, params=params, body=body_block.statements, lineno=name_tok['line'])
 
-    def parse_parameter(self):
-        """Analiza un parámetro formal de función.
-        
-        Returns:
-            VarDeclaration representando el parámetro
-        """
-        name = self.consume('ID')
+        self.consume('SEMI')
+        return Function(name=name_tok['value'], return_type=ret_type, params=params, body=[], lineno=name_tok['line'])
+
+    def parse_function_keyword_style(self):
+        self.consume('FUNC')
+        name_tok = self.consume('ID')
+        params = self.parse_parameter_list()
         self.consume('COLON')
-        t_type = self.consume('TYPE')
-        return VarDeclaration(name=name['value'], type_name=t_type['value'], lineno=name['line'])
+        ret_type, _ = self.parse_type()
+        if self.peek() and self.peek()['type'] == 'ASSIGN':
+            self.consume('ASSIGN')
+        body_block = self.parse_block()
+        return Function(name=name_tok['value'], return_type=ret_type, params=params, body=body_block.statements, lineno=name_tok['line'])
 
-    # =============== ANÁLISIS PRINCIPAL DEL PROGRAMA ===============
-
-    def parse_type(self):
-        """Analiza un tipo de dato que puede incluir arrays.
-        
-        Soporta:
-        - Tipos simples: integer, boolean, string, etc.
-        - Tipos array: array [tamaño] tipo_base
-        
-        Returns:
-            String con el nombre del tipo
-        """
+    def parse_declaration(self):
         tok = self.peek()
-        
-        if tok['type'] == 'ARRAY':
-            # array [Size] BaseType
-            self.consume('ARRAY')
-            self.consume('LBRACKET')
-            # Parsear el tamaño (puede ser númer o identificador)
-            if self.peek()['type'] == 'NUMBER':
-                self.consume('NUMBER')
-            elif self.peek()['type'] == 'ID':
-                self.consume('ID')
-            else:
-                raise Exception(f"Tamaño de array esperado en línea {self.peek()['line']}")
-            self.consume('RBRACKET')
-            
-            # Parsear el tipo base recursivamente (para arrays multidimensionales)
-            base_type = self.parse_type()
-            return f"array[{base_type}]"
-        
-        elif tok['type'] == 'TYPE':
-            type_tok = self.consume('TYPE')
-            return type_tok['value']
-        
-        elif tok['type'] == 'VOID':
-            void_tok = self.consume('VOID')
-            return void_tok['value']
-        
-        else:
-            raise Exception(f"Tipo esperado en línea {tok['line']}, pero se obtuvo {tok['type']}")
+        if not tok:
+            raise Exception("Declaración esperada al final del archivo")
+
+        if tok['type'] == 'FUNC':
+            return self.parse_function_keyword_style()
+
+        if tok['type'] != 'ID':
+            raise Exception(f"Declaración no esperada: {tok['type']} en línea {tok['line']}")
+
+        name_tok = self.consume('ID')
+        self.consume('COLON')
+
+        if self.peek() and self.peek()['type'] == 'FUNC':
+            return self.parse_named_function_decl(name_tok)
+
+        # Declaración global de variable.
+        var_type, array_sizes = self.parse_type()
+        value = None
+        if self.peek() and self.peek()['type'] == 'ASSIGN':
+            self.consume('ASSIGN')
+            value = self.parse_expression()
+        self.consume('SEMI')
+        return VarDeclaration(name=name_tok['value'], type_name=var_type, value=value, lineno=name_tok['line'], array_sizes=array_sizes)
 
     def parse(self):
-        """Analiza el programa completo.
-        
-        Un programa en B-Minor es una secuencia de declaraciones de funciones
-        y/o variables globales.
-        
-        Returns:
-            Nodo Program conteniendo el AST completo
-        """
         declarations = []
-        
-        # Procesar todas las declaraciones de nivel superior
         while self.peek():
-            tok = self.peek()
-            
-            # Puede ser ID seguido de : (variable o función)
-            if tok['type'] == 'ID' or tok['type'] == 'FUNC':
-                # Mirar adelante para determinar qué es
-                if tok['type'] == 'FUNC':
-                    # Es una palabra clave func
-                    declarations.append(self.parse_function())
-                else:
-                    # Es ID, necesito ver si es variable o función
-                    name_tok = self.consume('ID')
-                    
-                    if self.peek()['type'] == 'COLON':
-                        self.consume('COLON')
-                        
-                        # Verificar si es función o variable
-                        if self.peek()['type'] == 'FUNC':
-                            # Es una función: name: function returnType (params) = { body }
-                            self.consume('FUNC')
-                            ret_type = self.parse_type()
-                            
-                            self.consume('LPAREN')
-                            params = []
-                            if self.peek()['type'] != 'RPAREN':
-                                params.append(self.parse_parameter())
-                                while self.peek()['type'] == 'COMMA':
-                                    self.consume('COMMA')
-                                    params.append(self.parse_parameter())
-                            self.consume('RPAREN')
-                            
-                            # Puede haber '=' antes del bloque
-                            if self.peek()['type'] == 'ASSIGN':
-                                self.consume('ASSIGN')
-                            
-                            body = self.parse_block()
-                            declarations.append(Function(name=name_tok['value'], return_type=ret_type, params=params, body=body, lineno=name_tok['line']))
-                        
-                        else:
-                            # Es una variable: name: type [= value];
-                            var_type = self.parse_type()
-                            val = None
-                            if self.peek()['type'] == 'ASSIGN':
-                                self.consume('ASSIGN')
-                                val = self.parse_expression()
-                            self.consume('SEMI')
-                            declarations.append(VarDeclaration(name=name_tok['value'], type_name=var_type, value=val, lineno=name_tok['line']))
-                    else:
-                        raise Exception(f"Se esperaba ':' después de identificador en línea {name_tok['line']}")
-            
-            else:
-                raise Exception(f"Declaración no esperada: {tok['type']} en línea {tok['line']}")
-        
+            declarations.append(self.parse_declaration())
         return Program(declarations=declarations)
-
-        name = self.consume

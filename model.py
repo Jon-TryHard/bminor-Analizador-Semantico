@@ -19,43 +19,58 @@ class Node:
     """
     lineno: int = 0
 
+    def accept(self, visitor):
+        return visitor.visit(self)
+
 # =============== EXPRESIONES ===============
 
 @dataclass
-class IntLiteral:
+class IntLiteral(Node):
     """Representa un número entero literal (ej: 42)."""
     value: int
     lineno: int = 0
+    type: Optional[str] = None
 
 @dataclass
-class FloatLiteral:
+class FloatLiteral(Node):
     """Representa un número flotante literal (ej: 3.14)."""
     value: float
     lineno: int = 0
+    type: Optional[str] = None
 
 @dataclass
-class StringLiteral:
+class StringLiteral(Node):
     """Representa una cadena de texto literal (ej: "hola")."""
     value: str
     lineno: int = 0
+    type: Optional[str] = None
 
 @dataclass
-class BooleanLiteral:
+class CharLiteral(Node):
+    """Representa un carácter literal (ej: 'a')."""
+    value: str
+    lineno: int = 0
+    type: Optional[str] = None
+
+@dataclass
+class BooleanLiteral(Node):
     """Representa un valor booleano literal (ej: true, false)."""
     value: bool
     lineno: int = 0
+    type: Optional[str] = None
 
 @dataclass
-class Identifier:
+class Identifier(Node):
     """Representa una referencia a un identificador (variable o función).
     
     El análisis semántico verificará que el identificador existe en la tabla de símbolos.
     """
     name: str
     lineno: int = 0
+    type: Optional[str] = None
 
 @dataclass
-class UnaryOp:
+class UnaryOp(Node):
     """Representa una operación unaria (ej: -x, !b).
     
     Atributos:
@@ -69,7 +84,7 @@ class UnaryOp:
     type: Optional[str] = None
 
 @dataclass
-class BinaryOp:
+class BinaryOp(Node):
     """Representa una operación binaria (ej: a + b, x < y).
     
     Atributos:
@@ -85,7 +100,7 @@ class BinaryOp:
     type: Optional[str] = None
 
 @dataclass
-class FunctionCall:
+class FunctionCall(Node):
     """Representa una llamada a función (ej: print(x), sum(a, b)).
     
     Atributos:
@@ -98,10 +113,25 @@ class FunctionCall:
     lineno: int = 0
     type: Optional[str] = None
 
+@dataclass
+class IndexExpr(Node):
+    """Representa acceso por índice (ej: arr[i])."""
+    array: 'Node'
+    index: 'Node'
+    lineno: int = 0
+    type: Optional[str] = None
+
+@dataclass
+class ArrayLiteral(Node):
+    """Representa literal de arreglo (ej: {1, 2, 3})."""
+    elements: List['Node']
+    lineno: int = 0
+    type: Optional[str] = None
+
 # =============== SENTENCIAS (STATEMENTS) ===============
 
 @dataclass
-class VarDeclaration:
+class VarDeclaration(Node):
     """Representa la declaración de una variable (ej: x: integer = 10;).
     
     Atributos:
@@ -113,9 +143,10 @@ class VarDeclaration:
     type_name: str
     lineno: int = 0
     value: Optional['Node'] = None
+    array_sizes: List['Node'] = field(default_factory=list)
 
 @dataclass
-class Assignment:
+class Assignment(Node):
     """Representa la asignación a una variable ya declarada (ej: x = 20;).
     
     Se diferencia de VarDeclaration en que la variable ya debe estar declarada.
@@ -128,8 +159,18 @@ class Assignment:
     value: 'Node'
     lineno: int = 0
 
+
 @dataclass
-class IfStmt:
+class ArrayAssignment(Node):
+    """Representa una asignación a una posición de arreglo (ej: arr[i] = 5;)."""
+    array: 'Node'
+    index: 'Node'
+    value: 'Node'
+    lineno: int = 0
+    type: Optional[str] = None
+
+@dataclass
+class IfStmt(Node):
     """Representa una sentencia condicional if-else.
     
     Atributos:
@@ -143,7 +184,7 @@ class IfStmt:
     else_block: Optional[List['Node']] = None
 
 @dataclass
-class WhileStmt:
+class WhileStmt(Node):
     """Representa un bucle while (ej: while (x > 0) { ... }).
     
     Atributos:
@@ -155,7 +196,7 @@ class WhileStmt:
     lineno: int = 0
 
 @dataclass
-class ReturnStmt:
+class ReturnStmt(Node):
     """Representa una sentencia return.
     
     Atributos:
@@ -164,10 +205,45 @@ class ReturnStmt:
     lineno: int = 0
     expr: Optional['Node'] = None
 
+@dataclass
+class ExprStmt(Node):
+    """Representa una sentencia de expresión (ej: a + b;)."""
+    expr: 'Node'
+    lineno: int = 0
+
+@dataclass
+class BlockStmt(Node):
+    """Representa un bloque de sentencias { ... }."""
+    statements: List['Node']
+    lineno: int = 0
+
+@dataclass
+class ForStmt(Node):
+    """Representa un bucle for clásico."""
+    init: Optional['Node']
+    condition: Optional['Node']
+    step: Optional['Node']
+    body: List['Node']
+    lineno: int = 0
+
+@dataclass
+class PrintStmt(Node):
+    """Representa una sentencia print con una o más expresiones."""
+    args: List['Node']
+    lineno: int = 0
+
+@dataclass
+class PostfixOp(Node):
+    """Representa operador postfijo (ej: var++, var--)."""
+    op: str
+    operand: 'Node'
+    lineno: int = 0
+    type: Optional[str] = None
+
 # =============== ESTRUCTURAS SUPERIORES ===============
 
 @dataclass
-class Function:
+class Function(Node):
     """Representa la definición de una función.
     
     Atributos:
@@ -183,7 +259,7 @@ class Function:
     lineno: int = 0
 
 @dataclass
-class Program:
+class Program(Node):
     """Raíz del árbol de sintaxis (el programa completo).
     
     Atributos:
