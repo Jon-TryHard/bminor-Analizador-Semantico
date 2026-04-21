@@ -1,0 +1,22 @@
+/* Multiple semantic errors combined in one program */
+
+flag: boolean = true;
+limit: integer = 3;
+
+broken: function integer (x: integer, y: boolean) = {
+    local: string = x + 1;
+
+    if (x) {
+        print "x is true?", x, "\n";
+    }
+
+    return y;
+}
+
+main: function integer () = {
+    arr: array [flag] integer = {1, 2, 3};
+    z: integer = broken(10);
+    w: integer = arr[flag];
+    undef = z + nope;
+    return "done";
+}
