@@ -7,29 +7,9 @@ y semántico en secuencia.
 
 import sys
 import os
-import re
 from lexer import Lexer
 from parser import Parser
 from checker import SemanticChecker
-
-
-COLOR_RESET = "\033[0m"
-COLOR_RED = "\033[31m"
-COLOR_YELLOW = "\033[33m"
-COLOR_BLUE = "\033[34m"
-
-
-def _colorize_line_reference(message):
-    pattern = r"(en línea\s+\d+|línea\s+\d+)"
-    return re.sub(pattern, lambda m: f"{COLOR_BLUE}{m.group(1)}{COLOR_RESET}", message)
-
-
-def _print_error(filename, message, syntax=False):
-    colored_file = f"{COLOR_YELLOW}{filename}{COLOR_RESET}"
-    colored_message = _colorize_line_reference(message)
-    if syntax:
-        colored_message = f"{COLOR_RED}{colored_message}{COLOR_RESET}"
-    print(f"[ERROR] {colored_file}: {colored_message}")
 
 
 def _collect_test_files():
@@ -54,7 +34,7 @@ def _batch_lex(files):
                 source = f.read()
             tokens_by_file[filename] = lexer.tokenize(source)
         except Exception as e:
-            _print_error(filename, f"Error léxico: {e}")
+            print(f"[ERROR] {filename}: Error léxico: {e}")
             ok = False
 
     return ok, tokens_by_file
@@ -73,7 +53,7 @@ def _batch_parse(files, tokens_by_file):
             parser = Parser(tokens_by_file[filename])
             ast_by_file[filename] = parser.parse()
         except Exception as e:
-            _print_error(filename, f"Error sintáctico: {e}", syntax=True)
+            print(f"[ERROR] {filename}: Error sintáctico: {e}")
             ok = False
 
     return ok, ast_by_file
@@ -100,7 +80,7 @@ def run_test(filename, run_semantic=False, show_syntax=True):
         tokens = lexer.tokenize(source)
 
     except Exception as e:
-        _print_error(filename, f"Error léxico: {e}")
+        print(f"[ERROR] {filename}: Error léxico: {e}")
         return False
 
     try:
@@ -110,7 +90,7 @@ def run_test(filename, run_semantic=False, show_syntax=True):
 
     except Exception as e:
         # Si falla sintaxis, no se ejecuta el análisis semántico.
-        _print_error(filename, f"Error sintáctico: {e}", syntax=True)
+        print(f"[ERROR] {filename}: Error sintáctico: {e}")
         return False
 
     if not run_semantic:
@@ -124,11 +104,11 @@ def run_test(filename, run_semantic=False, show_syntax=True):
         # Evaluación del resultado
         if checker.errors:
             for err in checker.errors:
-                _print_error(filename, err)
+                print(f"[ERROR] {filename}: {err}")
             return False
         return True
     except Exception as e:
-        _print_error(filename, f"Error durante análisis semántico: {e}")
+        print(f"[ERROR] {filename}: Error durante análisis semántico: {e}")
         return False
 
 # ============ EJEMPLOS DE USO ============
@@ -167,24 +147,15 @@ def run_all_semantic_tests():
 
     ok = lex_ok and parse_ok
     first_error_group = True
-    printed_semantic_output = False
-
-    def _ensure_semantic_section_gap():
-        nonlocal printed_semantic_output
-        if not printed_semantic_output and not parse_ok:
-            print()
-            print()
-        printed_semantic_output = True
 
     def _print_file_errors(filename, errors):
         nonlocal first_error_group
         if not errors:
             return
-        _ensure_semantic_section_gap()
         if not first_error_group:
             print()
         for err in errors:
-            _print_error(filename, err)
+            print(f"[ERROR] {filename}: {err}")
         first_error_group = False
 
     for filename in good_files:
@@ -206,10 +177,9 @@ def run_all_semantic_tests():
         if checker.errors:
             _print_file_errors(filename, checker.errors)
         else:
-            _ensure_semantic_section_gap()
             if not first_error_group:
                 print()
-            _print_error(filename, "Se esperaban errores semánticos, pero no se detectó ninguno")
+            print(f"[ERROR] {filename}: Se esperaban errores semánticos, pero no se detectó ninguno")
             first_error_group = False
             ok = False
 
@@ -230,7 +200,7 @@ if __name__ == '__main__':
 
         filename = sys.argv[2]
         if not os.path.exists(filename):
-            _print_error(filename, "Archivo no encontrado")
+            print(f"[ERROR] Archivo '{filename}' no encontrado")
             sys.exit(1)
 
         success = run_test(filename, run_semantic=True, show_syntax=False)
@@ -242,7 +212,7 @@ if __name__ == '__main__':
     # Ejecutar análisis sobre un archivo específico
     filename = sys.argv[1]
     if not os.path.exists(filename):
-        _print_error(filename, "Archivo no encontrado")
+        print(f"[ERROR] Archivo '{filename}' no encontrado")
         sys.exit(1)
 
     run_semantic = len(sys.argv) > 2 and sys.argv[2] == '--semantic'
