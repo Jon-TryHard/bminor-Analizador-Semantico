@@ -1,10 +1,3 @@
-"""Punto de entrada para ejecutar el análisis semántico de archivos B-Minor.
-
-Este módulo facilita la prueba del analizador semántico sobre archivos de prueba
-individuales o en lotes. Se encarga de orquestar los análisis léxico, sintáctico
-y semántico en secuencia.
-"""
-
 import sys
 import os
 import re
@@ -30,6 +23,22 @@ def _print_error(filename, message, syntax=False):
     if syntax:
         colored_message = f"{COLOR_RED}{colored_message}{COLOR_RESET}"
     print(f"[ERROR] {colored_file}: {colored_message}")
+
+
+def _resolve_input_file(path):
+    normalized = os.path.normpath(path)
+    candidates = [normalized]
+
+    # Permite invocar con rutas cortas como bad/foo.bminor o good/foo.bminor
+    if normalized.startswith(f"bad{os.sep}") or normalized.startswith(f"good{os.sep}"):
+        candidates.append(os.path.normpath(os.path.join("tests", normalized)))
+    else:
+        candidates.append(os.path.normpath(os.path.join("tests", normalized)))
+
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    return normalized
 
 
 def _collect_test_files():
@@ -228,7 +237,7 @@ if __name__ == '__main__':
             print("Error: falta la ruta del archivo para checker")
             sys.exit(1)
 
-        filename = sys.argv[2]
+        filename = _resolve_input_file(sys.argv[2])
         if not os.path.exists(filename):
             _print_error(filename, "Archivo no encontrado")
             sys.exit(1)
@@ -240,12 +249,13 @@ if __name__ == '__main__':
         sys.exit(1)
 
     # Ejecutar análisis sobre un archivo específico
-    filename = sys.argv[1]
+    filename = _resolve_input_file(sys.argv[1])
     if not os.path.exists(filename):
         _print_error(filename, "Archivo no encontrado")
         sys.exit(1)
 
-    run_semantic = len(sys.argv) > 2 and sys.argv[2] == '--semantic'
+    extra_args = sys.argv[2:]
+    run_semantic = '--syntax' not in extra_args
     success = run_test(filename, run_semantic=run_semantic)
     
     if success:
