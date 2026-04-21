@@ -1,0 +1,25 @@
+/* POO simulada sin clases: "constructor" y "metodos" con funciones */
+
+counter_make: function integer (initial: integer) = {
+    return initial;
+}
+
+counter_inc: function integer (state: integer) = {
+    return state + 1;
+}
+
+counter_add: function integer (state: integer, amount: integer) = {
+    return state + amount;
+}
+
+main: function integer () = {
+    counter: integer = counter_make(10);
+    counter = counter_inc(counter);
+    counter = counter_add(counter, 5);
+
+    if (counter == 16) {
+        print "counter ok\n";
+    }
+
+    return counter;
+}

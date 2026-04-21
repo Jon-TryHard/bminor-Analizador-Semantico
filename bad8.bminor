@@ -1,4 +1,4 @@
-/* Loop */
+/* Conditions */
 
 var: integer;
 
@@ -8,9 +8,9 @@ main: function void () = {
     else
         var--;
 
-    new: boolean;
+    new: integer = 0;
     if (new)
-        var++;
+        new++;
     else
-        var--;
+        new--;
 }

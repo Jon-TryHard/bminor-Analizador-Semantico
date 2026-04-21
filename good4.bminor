@@ -1,0 +1,36 @@
+/* Mixed control flow, arrays and function calls - semantically valid */
+
+LIMIT: integer = 6;
+values: array [LIMIT] integer = {2, 4, 6, 8, 10, 12};
+
+average: function float (total: integer, count: integer) = {
+    total_f: float = total;
+    count_f: float = count;
+    return total_f / count_f;
+}
+
+sum_if_even: function integer (arr: array [] integer, size: integer) = {
+    i: integer;
+    acc: integer = 0;
+
+    for (i = 0; i < size; i++) {
+        if (arr[i] % 2 == 0) {
+            acc = acc + arr[i];
+        }
+    }
+
+    return acc;
+}
+
+main: function integer () = {
+    total: integer = sum_if_even(values, LIMIT);
+    avg: float = average(total, LIMIT);
+
+    if (avg > 0.0) {
+        print "sum=", total, " avg=", avg, "\n";
+    } else {
+        print "unexpected average\n";
+    }
+
+    return 0;
+}
