@@ -88,6 +88,10 @@ class Parser:
         if tok['type'] == 'VOID':
             return self.consume('VOID')['value'], []
 
+        # Tipos de clase (identificadores de usuario)
+        if tok['type'] == 'ID':
+            return self.consume('ID')['value'], []
+
         raise Exception(f"Tipo esperado en línea {tok['line']}, pero se obtuvo {tok['type']}")
 
     # ---------- Expresiones ----------
@@ -147,6 +151,26 @@ class Parser:
                 node = FunctionCall(name=node.name, args=args, lineno=tok['line'])
                 continue
 
+            if tok['type'] == 'DOT':
+                self.consume('DOT')
+                member_tok = self.consume('ID')
+                member_name = member_tok['value']
+                line = member_tok['line']
+
+                if self.peek() and self.peek()['type'] == 'LPAREN':
+                    self.consume('LPAREN')
+                    args = []
+                    if self.peek() and self.peek()['type'] != 'RPAREN':
+                        args.append(self.parse_expression())
+                        while self.peek() and self.peek()['type'] == 'COMMA':
+                            self.consume('COMMA')
+                            args.append(self.parse_expression())
+                    self.consume('RPAREN')
+                    node = MethodCall(obj=node, method=member_name, args=args, lineno=line)
+                else:
+                    node = MemberAccess(obj=node, member=member_name, lineno=line)
+                continue
+
             if tok['type'] == 'LBRACKET':
                 self.consume('LBRACKET')
                 index = self.parse_expression()
@@ -186,6 +210,19 @@ class Parser:
             self.consume('RBRACE')
             return ArrayLiteral(elements=elements, lineno=line)
 
+        if tok['type'] == 'NEW':
+            new_tok = self.consume('NEW')
+            class_tok = self.consume('ID')
+            self.consume('LPAREN')
+            args = []
+            if self.peek() and self.peek()['type'] != 'RPAREN':
+                args.append(self.parse_expression())
+                while self.peek() and self.peek()['type'] == 'COMMA':
+                    self.consume('COMMA')
+                    args.append(self.parse_expression())
+            self.consume('RPAREN')
+            return NewExpr(class_name=class_tok['value'], args=args, lineno=new_tok['line'])
+
         tok = self.consume()
 
         if tok['type'] == 'NUMBER':
@@ -205,6 +242,8 @@ class Parser:
             return CharLiteral(value=value, lineno=tok['line'])
         if tok['type'] == 'ID':
             return Identifier(name=tok['value'], lineno=tok['line'])
+        if tok['type'] == 'THIS':
+            return Identifier(name='this', lineno=tok['line'])
 
         raise Exception(f"Expresión inválida en línea {tok['line']}: {tok['type']}")
 
@@ -254,6 +293,8 @@ class Parser:
                 return Assignment(name=expr.name, value=value, lineno=expr.lineno)
             if isinstance(expr, IndexExpr):
                 return ArrayAssignment(array=expr.array, index=expr.index, value=value, lineno=expr.lineno)
+            if isinstance(expr, MemberAccess):
+                return MemberAssignment(target=expr, value=value, lineno=expr.lineno)
             raise Exception(f"Asignación inválida en línea {assign_tok['line']}")
         return expr
 
@@ -368,6 +409,8 @@ class Parser:
                 return Assignment(name=expr.name, value=value, lineno=expr.lineno)
             if isinstance(expr, IndexExpr):
                 return ArrayAssignment(array=expr.array, index=expr.index, value=value, lineno=expr.lineno)
+            if isinstance(expr, MemberAccess):
+                return MemberAssignment(target=expr, value=value, lineno=expr.lineno)
             raise Exception(f"Asignación inválida en línea {tok['line']}")
 
         if tok['type'] == 'ID' and self.peek(1) and self.peek(1)['type'] == 'LBRACKET':
@@ -391,6 +434,8 @@ class Parser:
                 return Assignment(name=expr.name, value=value, lineno=expr.lineno)
             if isinstance(expr, IndexExpr):
                 return ArrayAssignment(array=expr.array, index=expr.index, value=value, lineno=expr.lineno)
+            if isinstance(expr, MemberAccess):
+                return MemberAssignment(target=expr, value=value, lineno=expr.lineno)
             raise Exception(f"Asignación inválida en línea {assign_tok['line']}")
         self.consume('SEMI')
         return ExprStmt(expr=expr, lineno=tok['line'])
@@ -438,6 +483,41 @@ class Parser:
         body_block = self.parse_block()
         return Function(name=name_tok['value'], return_type=ret_type, params=params, body=body_block.statements, lineno=name_tok['line'])
 
+    def parse_class_declaration(self):
+        class_tok = self.consume('CLASS')
+        name_tok = self.consume('ID')
+        self.consume('LBRACE')
+
+        fields = []
+        methods = []
+        while self.peek() and self.peek()['type'] != 'RBRACE':
+            member_name_tok = self.consume('ID')
+            self.consume('COLON')
+
+            if self.peek() and self.peek()['type'] == 'FUNC':
+                method = self.parse_named_function_decl(member_name_tok)
+                methods.append(method)
+                continue
+
+            member_type, array_sizes = self.parse_type()
+            value = None
+            if self.peek() and self.peek()['type'] == 'ASSIGN':
+                self.consume('ASSIGN')
+                value = self.parse_expression()
+            self.consume('SEMI')
+            fields.append(
+                VarDeclaration(
+                    name=member_name_tok['value'],
+                    type_name=member_type,
+                    value=value,
+                    lineno=member_name_tok['line'],
+                    array_sizes=array_sizes
+                )
+            )
+
+        self.consume('RBRACE')
+        return ClassDeclaration(name=name_tok['value'], fields=fields, methods=methods, lineno=class_tok['line'])
+
     def parse_declaration(self):
         tok = self.peek()
         if not tok:
@@ -445,6 +525,9 @@ class Parser:
 
         if tok['type'] == 'FUNC':
             return self.parse_function_keyword_style()
+
+        if tok['type'] == 'CLASS':
+            return self.parse_class_declaration()
 
         if tok['type'] != 'ID':
             raise Exception(f"Declaración no esperada: {tok['type']} en línea {tok['line']}")

@@ -114,6 +114,31 @@ class FunctionCall(Node):
     type: Optional[str] = None
 
 @dataclass
+class NewExpr(Node):
+    """Representa creación de instancia (ej: new Point(1, 2))."""
+    class_name: str
+    args: List['Node']
+    lineno: int = 0
+    type: Optional[str] = None
+
+@dataclass
+class MemberAccess(Node):
+    """Representa acceso a miembro (ej: obj.x)."""
+    obj: 'Node'
+    member: str
+    lineno: int = 0
+    type: Optional[str] = None
+
+@dataclass
+class MethodCall(Node):
+    """Representa llamada a método (ej: obj.move(1, 2))."""
+    obj: 'Node'
+    method: str
+    args: List['Node']
+    lineno: int = 0
+    type: Optional[str] = None
+
+@dataclass
 class IndexExpr(Node):
     """Representa acceso por índice (ej: arr[i])."""
     array: 'Node'
@@ -168,6 +193,13 @@ class ArrayAssignment(Node):
     value: 'Node'
     lineno: int = 0
     type: Optional[str] = None
+
+@dataclass
+class MemberAssignment(Node):
+    """Representa una asignación a un atributo de instancia (ej: obj.x = 10;)."""
+    target: MemberAccess
+    value: 'Node'
+    lineno: int = 0
 
 @dataclass
 class IfStmt(Node):
@@ -256,6 +288,14 @@ class Function(Node):
     return_type: str
     params: List['VarDeclaration']
     body: List['Node']
+    lineno: int = 0
+
+@dataclass
+class ClassDeclaration(Node):
+    """Representa una clase con atributos y métodos."""
+    name: str
+    fields: List['VarDeclaration']
+    methods: List['Function']
     lineno: int = 0
 
 @dataclass

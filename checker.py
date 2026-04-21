@@ -95,6 +95,8 @@ class SemanticChecker:
         self.errors = []
         self.current_return_type = None
         self.in_loop = False
+        self.classes = {}
+        self.current_class = None
 
     def _enter_scope(self, name):
         self.symtab = Symtab(name, parent=self.symtab)
@@ -111,6 +113,54 @@ class SemanticChecker:
                 self.symtab.add(decl.name, decl)
             except Exception as e:
                 self.report(str(e), decl.lineno)
+
+    def _declare_classes(self, declarations):
+        for decl in declarations:
+            if not isinstance(decl, ClassDeclaration):
+                continue
+            if decl.name in self.classes:
+                self.report(f"Redefinición de clase '{decl.name}'", decl.lineno)
+                continue
+            self.classes[decl.name] = decl
+
+    def _is_valid_type(self, type_name):
+        if is_valid_type(type_name):
+            return True
+        if isinstance(type_name, str) and type_name.startswith('array_of_'):
+            return self._is_valid_type(type_name[9:])
+        return type_name in self.classes
+
+    def _get_method(self, class_name, method_name):
+        class_decl = self.classes.get(class_name)
+        if not class_decl:
+            return None
+        for method in class_decl.methods:
+            if method.name == method_name:
+                return method
+        return None
+
+    def _get_field(self, class_name, field_name):
+        class_decl = self.classes.get(class_name)
+        if not class_decl:
+            return None
+        for field in class_decl.fields:
+            if field.name == field_name:
+                return field
+        return None
+
+    def _check_callable_args(self, callable_name, params, args, lineno):
+        if len(args) != len(params):
+            self.report(f"{callable_name} espera {len(params)} argumentos, recibió {len(args)}", lineno)
+            return False
+
+        has_error = False
+        for i, arg in enumerate(args):
+            arg_t = self.visit(arg)
+            param_t = params[i].type_name
+            if not can_assign(param_t, arg_t):
+                self.report(f"Argumento {i+1} de {callable_name} debe ser {param_t}, se recibió {arg_t}", lineno)
+                has_error = True
+        return not has_error
 
     def _stmt_guarantees_return(self, stmt):
         if isinstance(stmt, ReturnStmt):
@@ -143,6 +193,7 @@ class SemanticChecker:
 
     @multimethod
     def visit(self, node: Program):
+        self._declare_classes(node.declarations)
         self._declare_function_signatures(node.declarations)
         for decl in node.declarations:
             self.visit(decl)
@@ -185,8 +236,62 @@ class SemanticChecker:
             self.symtab = old_symtab
 
     @multimethod
+    def visit(self, node: ClassDeclaration):
+        seen = set()
+        for field in node.fields:
+            if field.name in seen:
+                self.report(f"Miembro duplicado '{field.name}' en clase '{node.name}'", field.lineno)
+                continue
+            seen.add(field.name)
+            if not self._is_valid_type(field.type_name):
+                self.report(f"Tipo inválido en atributo '{field.name}': {field.type_name}", field.lineno)
+
+        for method in node.methods:
+            if method.name in seen:
+                self.report(f"Miembro duplicado '{method.name}' en clase '{node.name}'", method.lineno)
+                continue
+            seen.add(method.name)
+
+            if not self._is_valid_type(method.return_type):
+                self.report(f"Tipo de retorno inválido en método '{method.name}': {method.return_type}", method.lineno)
+
+            old_symtab = self.symtab
+            old_return_type = self.current_return_type
+            old_class = self.current_class
+            self.current_class = node.name
+            self._enter_scope(f"method_{node.name}_{method.name}")
+            self.current_return_type = method.return_type
+
+            try:
+                # this disponible dentro de métodos.
+                this_var = VarDeclaration(name='this', type_name=node.name, lineno=method.lineno)
+                self.symtab.add('this', this_var)
+
+                for param in method.params:
+                    if not self._is_valid_type(param.type_name):
+                        self.report(f"Tipo inválido en parámetro '{param.name}': {param.type_name}", param.lineno)
+                    self._check_array_sizes(param)
+                    try:
+                        self.symtab.add(param.name, param)
+                    except Exception as e:
+                        self.report(str(e), param.lineno)
+
+                for stmt in method.body:
+                    self.visit(stmt)
+
+                if method.return_type != "void" and not self._body_guarantees_return(method.body):
+                    self.report(
+                        f"El método '{node.name}.{method.name}' debe retornar un valor de tipo {method.return_type}",
+                        method.lineno,
+                    )
+            finally:
+                self.current_class = old_class
+                self.current_return_type = old_return_type
+                self.symtab = old_symtab
+
+    @multimethod
     def visit(self, node: VarDeclaration):
-        if not is_valid_type(node.type_name):
+        if not self._is_valid_type(node.type_name):
             self.report(f"Tipo desconocido '{node.type_name}'", node.lineno)
             return
 
@@ -214,6 +319,17 @@ class SemanticChecker:
             self.symtab.add(node.name, node)
         except Exception as e:
             self.report(str(e), node.lineno)
+
+    @multimethod
+    def visit(self, node: MemberAssignment):
+        target_type = self.visit(node.target)
+        value_type = self.visit(node.value)
+        if target_type == "error":
+            return "error"
+        if not can_assign(target_type, value_type):
+            self.report(f"No se puede asignar {value_type} a miembro de tipo {target_type}", node.lineno)
+            return "error"
+        return target_type
 
     @multimethod
     def visit(self, node: Assignment):

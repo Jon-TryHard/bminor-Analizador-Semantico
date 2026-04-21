@@ -37,6 +37,9 @@ class Lexer:
             ('WHILE',      r'\bwhile\b'),                      # Palabra clave while
             ('FOR',        r'\bfor\b'),                        # Palabra clave for
             ('ARRAY',      r'\barray\b'),                      # Palabra clave array
+               ('CLASS',      r'\bclass\b'),                     # Palabra clave class
+               ('NEW',        r'\bnew\b'),                       # Palabra clave new
+               ('THIS',       r'\bthis\b'),                      # Referencia al objeto actual
             ('FUNC',       r'\bfunction\b'),                  # Palabra clave function
             ('ID',         r'[A-Za-z_][A-Za-z0-9_]*'),         # Identificadores
             
@@ -66,6 +69,7 @@ class Lexer:
             ('RPAREN',     r'\)'),                             # Paréntesis de cierre
             ('LBRACKET',   r'\['),                             # Corchete de apertura
             ('RBRACKET',   r'\]'),                             # Corchete de cierre
+               ('DOT',        r'\.'),                             # Acceso a miembros
             ('COLON',      r':'),                              # Dos puntos
             ('ASSIGN',     r'='),                              # Operador de asignación
             ('COMMA',      r','),                              # Coma

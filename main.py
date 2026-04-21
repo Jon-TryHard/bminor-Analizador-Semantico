@@ -146,6 +146,18 @@ def run_all_semantic_tests():
     parse_ok, ast_by_file = _batch_parse(all_files, tokens_by_file)
 
     ok = lex_ok and parse_ok
+    first_error_group = True
+
+    def _print_file_errors(filename, errors):
+        nonlocal first_error_group
+        if not errors:
+            return
+        if not first_error_group:
+            print()
+        for err in errors:
+            print(f"[ERROR] {filename}: {err}")
+        first_error_group = False
+
     for filename in good_files:
         if filename not in ast_by_file:
             ok = False
@@ -153,8 +165,7 @@ def run_all_semantic_tests():
         checker = SemanticChecker()
         checker.visit(ast_by_file[filename])
         if checker.errors:
-            for err in checker.errors:
-                print(f"[ERROR] {filename}: {err}")
+            _print_file_errors(filename, checker.errors)
             ok = False
 
     for filename in bad_files:
@@ -164,10 +175,12 @@ def run_all_semantic_tests():
         checker = SemanticChecker()
         checker.visit(ast_by_file[filename])
         if checker.errors:
-            for err in checker.errors:
-                print(f"[ERROR] {filename}: {err}")
+            _print_file_errors(filename, checker.errors)
         else:
+            if not first_error_group:
+                print()
             print(f"[ERROR] {filename}: Se esperaban errores semánticos, pero no se detectó ninguno")
+            first_error_group = False
             ok = False
 
     return ok

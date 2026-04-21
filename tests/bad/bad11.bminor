@@ -1,0 +1,20 @@
+/* POO simulada sin clases: uso incorrecto de "metodos" */
+
+counter_make: function integer (initial: integer) = {
+    return initial;
+}
+
+counter_inc: function integer (state: integer) = {
+    return state + 1;
+}
+
+counter_add: function integer (state: integer, amount: integer) = {
+    return state + amount;
+}
+
+main: function integer () = {
+    counter: integer = counter_make(true);
+    counter = counter_inc();
+    counter = counter_add(counter, "x");
+    return false;
+}
