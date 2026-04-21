@@ -5,6 +5,6 @@ a: function array [1] integer () = {
 }
 
 b: function void () = {
-    c: function integer();
+    //c: function integer();
     return 1;
 }
