@@ -192,6 +192,19 @@ class Parser:
         if not tok:
             raise Exception("Expresión esperada al final del archivo")
 
+        if tok['type'] == 'ID' and tok['value'] == 'new' and self.peek(1) and self.peek(1)['type'] == 'ID' and self.peek(2) and self.peek(2)['type'] == 'LPAREN':
+            new_tok = self.consume('ID')
+            class_tok = self.consume('ID')
+            self.consume('LPAREN')
+            args = []
+            if self.peek() and self.peek()['type'] != 'RPAREN':
+                args.append(self.parse_expression())
+                while self.peek() and self.peek()['type'] == 'COMMA':
+                    self.consume('COMMA')
+                    args.append(self.parse_expression())
+            self.consume('RPAREN')
+            return NewExpr(class_name=class_tok['value'], args=args, lineno=new_tok['line'])
+
         if tok['type'] == 'LPAREN':
             self.consume('LPAREN')
             expr = self.parse_expression()
@@ -209,19 +222,6 @@ class Parser:
                     elements.append(self.parse_expression())
             self.consume('RBRACE')
             return ArrayLiteral(elements=elements, lineno=line)
-
-        if tok['type'] == 'NEW':
-            new_tok = self.consume('NEW')
-            class_tok = self.consume('ID')
-            self.consume('LPAREN')
-            args = []
-            if self.peek() and self.peek()['type'] != 'RPAREN':
-                args.append(self.parse_expression())
-                while self.peek() and self.peek()['type'] == 'COMMA':
-                    self.consume('COMMA')
-                    args.append(self.parse_expression())
-            self.consume('RPAREN')
-            return NewExpr(class_name=class_tok['value'], args=args, lineno=new_tok['line'])
 
         tok = self.consume()
 
@@ -241,9 +241,9 @@ class Parser:
             value = tok['value'][1:-1]
             return CharLiteral(value=value, lineno=tok['line'])
         if tok['type'] == 'ID':
+            if tok['value'] == 'this':
+                return Identifier(name='this', lineno=tok['line'])
             return Identifier(name=tok['value'], lineno=tok['line'])
-        if tok['type'] == 'THIS':
-            return Identifier(name='this', lineno=tok['line'])
 
         raise Exception(f"Expresión inválida en línea {tok['line']}: {tok['type']}")
 
@@ -484,7 +484,7 @@ class Parser:
         return Function(name=name_tok['value'], return_type=ret_type, params=params, body=body_block.statements, lineno=name_tok['line'])
 
     def parse_class_declaration(self):
-        class_tok = self.consume('CLASS')
+        class_tok = self.consume('ID')
         name_tok = self.consume('ID')
         self.consume('LBRACE')
 
@@ -526,7 +526,7 @@ class Parser:
         if tok['type'] == 'FUNC':
             return self.parse_function_keyword_style()
 
-        if tok['type'] == 'CLASS':
+        if tok['type'] == 'ID' and tok['value'] == 'class' and self.peek(1) and self.peek(1)['type'] == 'ID' and self.peek(2) and self.peek(2)['type'] == 'LBRACE':
             return self.parse_class_declaration()
 
         if tok['type'] != 'ID':

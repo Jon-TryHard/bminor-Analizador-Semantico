@@ -1,25 +1,28 @@
-/* POO simulada sin clases: "constructor" y "metodos" con funciones */
+/* Class support: declaration, constructor, member access and method call */
 
-counter_make: function integer (initial: integer) = {
-    return initial;
-}
+class Point {
+    x: integer;
+    y: integer;
 
-counter_inc: function integer (state: integer) = {
-    return state + 1;
-}
+    __init__: function void (x0: integer, y0: integer) = {
+        this.x = x0;
+        this.y = y0;
+        return;
+    }
 
-counter_add: function integer (state: integer, amount: integer) = {
-    return state + amount;
+    move_x: function void (dx: integer) = {
+        this.x = this.x + dx;
+        return;
+    }
+
+    sum: function integer () = {
+        return this.x + this.y;
+    }
 }
 
 main: function integer () = {
-    counter: integer = counter_make(10);
-    counter = counter_inc(counter);
-    counter = counter_add(counter, 5);
-
-    if (counter == 16) {
-        print "counter ok\n";
-    }
-
-    return counter;
+    p: Point = new Point(2, 3);
+    p.move_x(5);
+    p.y = 4;
+    return p.sum();
 }
