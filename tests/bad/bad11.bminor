@@ -1,0 +1,24 @@
+/* Class support: semantic errors */
+
+class Counter {
+    value: integer;
+
+    __init__: function void (start: integer) = {
+        this.value = start;
+        return;
+    }
+
+    add: function integer (delta: integer) = {
+        this.value = this.value + delta;
+        return this.value;
+    }
+}
+
+main: function integer () = {
+    c: Counter = new Counter(true);
+    c.value = "oops";
+    x: integer = c.missing();
+    y: integer = c.add("3");
+    z: integer = new Ghost();
+    return false;
+}

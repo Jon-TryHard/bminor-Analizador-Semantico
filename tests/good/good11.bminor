@@ -1,0 +1,28 @@
+/* Class support: declaration, constructor, member access and method call */
+
+class Point {
+    x: integer;
+    y: integer;
+
+    __init__: function void (x0: integer, y0: integer) = {
+        this.x = x0;
+        this.y = y0;
+        return;
+    }
+
+    move_x: function void (dx: integer) = {
+        this.x = this.x + dx;
+        return;
+    }
+
+    sum: function integer () = {
+        return this.x + this.y;
+    }
+}
+
+main: function integer () = {
+    p: Point = new Point(2, 3);
+    p.move_x(5);
+    p.y = 4;
+    return p.sum();
+}
